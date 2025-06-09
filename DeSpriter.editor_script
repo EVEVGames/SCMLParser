@@ -355,6 +355,7 @@ local function despriter(opts)
         for animation, objects in pairs(entity.animations) do
             
             script_reset[#script_reset + 1] = "-- "..animation
+            script_reset[#script_reset + 1] = string.format("if not animation or animation == %q then", animation)
             script_animations[#script_animations + 1] = string.format("[%q] = {", animation)
             script_animations[#script_animations + 1] = string.format([[    run = function(self)]], animation)
             script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], "/"..animation)
@@ -363,49 +364,48 @@ local function despriter(opts)
                     local frame = frames[1]
                     local type = string.match(url, "o") and "object" or "bone"
                     if frame then
-                        --script_reset[#script_reset + 1] = string.format([[if go.exists(%q) then]], url)
+                        --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
                         if frame.x then
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "position.x", %.8f)]], url, tonumber(frame.x))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", %.8f)]], url, tonumber(frame.x))
                         end
                         if frame.y then
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "position.y", %.8f)]], url, tonumber(frame.y))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.8f)]], url, tonumber(frame.y))
                         end
                         if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "position.z", %.8f)]], url, tonumber(frame.z_index) * .00000001)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.8f)]], url, tonumber(frame.z_index) * .00000001)
                         end
                         if frame.scale_x then
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "scale.x", %.8f)]], url, tonumber(frame.scale_x))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.x", %.8f)]], url, tonumber(frame.scale_x))
                         end
                         if frame.scale_y then
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "scale.y", %.8f)]], url, tonumber(frame.scale_y))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.y", %.8f)]], url, tonumber(frame.scale_y))
                         end
                         if frame.angle then
                             local quat = quat_from_z_deg(tonumber(frame.angle))
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "rotation.z", %.8f)]], url, quat.z)
-                            script_reset[#script_reset + 1] = string.format([[go.set(%q, "rotation.w", %.8f)]], url, quat.w)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.z", %.8f)]], url, quat.z)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.w", %.8f)]], url, quat.w)
                         end
                         if frame.a then
                             if type == "object" then
-                                script_reset[#script_reset + 1] = string.format([[go.set(%q, "tint.w", %.8f)]], url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.a))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.8f)]], url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.a))
                             end
                         end 
                         if type == "object" then
                             if frame.pivot_x then
-                                script_reset[#script_reset + 1] = string.format([[go.set(%q, "position.x", -go.get(%q, "size").x * %.8f)]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_x))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.8f)]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_x))
                             end
                             if frame.pivot_y then
-                                script_reset[#script_reset + 1] = string.format([[go.set(%q, "position.y", go.get(%q, "size").y * (1-%.8f))]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_y))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.8f))]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_y))
                             end
                         end
-                        script_reset[#script_reset + 1] = string.format([[msg.post(%q, "disable")]], url)
+                        script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
                         if type == "object" then
-                            script_reset[#script_reset + 1] = string.format([[msg.post(%q, "disable")]], url.."_p")
-                            script_reset[#script_reset + 1] = string.format([[msg.post(%q, "disable")]], url.."_p#"..string.sub(url, 2).."_s")
+                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."_p")
+                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."_p#"..string.sub(url, 2).."_s")
                         end
-                        --script_reset[#script_reset + 1] = [[end]]
+                        --script_reset[#script_reset + 1] = [[    end]]
                     end
                     --script_animations[#script_animations + 1] = string.format([[        if go.exists(%q) then]], url)
-                    -- Otimizado: Evita habilitar objetos já habilitados e não adiciona save_timer desnecessário
 
                     local first = frame
                     local enabled_objects = {}
@@ -490,7 +490,8 @@ local function despriter(opts)
                     --script_animations[#script_animations + 1] = [[        end]]
                 end
             end
-            script_reset[#script_reset + 1] = string.format([[msg.post(%q, "disable")]], "/"..animation)
+            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], "/"..animation)
+            script_reset[#script_reset + 1] = "end"
             script_animations[#script_animations + 1] = [[    end,]]
             script_animations[#script_animations + 1] = string.format([[    loop = %s,]], objects.looping and "true" or "false")
             script_animations[#script_animations + 1] = string.format([[    length = %.8f]], tonumber(objects.length) / 1000)
@@ -502,7 +503,7 @@ go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
 
-local function stop_animation(self, handler)
+local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
     for index = #self.timers, 1, -1 do
         if timer.get_info(self.timers[index]) and handler ~= self.timers[index] then
@@ -543,7 +544,7 @@ function init(self)
             animations[animation].run(self)
             if self.loop then
                 save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
-                    stop_animation(self, handler)
+                    stop_animation(self, handler, animation)
                     animations[animation].run(self)
                 end))
             end
@@ -564,7 +565,7 @@ function on_message(self, message_id, message)
             animations[animation].run(self)
             if message.loop or (message.loop == nil and animations[animation].loop) then
                 save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
-                    stop_animation(self, handler)
+                    stop_animation(self, handler, animation)
                     animations[animation].run(self)
                 end))
             end
