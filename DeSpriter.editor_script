@@ -115,103 +115,136 @@ local function despriter(opts)
                         entity.default = node.attrs.name
                     end
 
+                    local parents = {}
+
                     local timelines = node.children
+
+                    local function get_parent(parent, bone_refs, ref, name)
+                        ref = ref or reference
+                        name = name or ""
+                        if not parent then
+                            return ref, name
+                        end
+                        for _, node in pairs(bone_refs) do
+                            if node.tag == "bone_ref" and node.attrs.id == parent then
+                                if node.attrs.parent then
+                                    ref, name = get_parent(node.attrs.parent, bone_refs, ref, name)
+                                end
+                                local parent_timeline = node.attrs.timeline
+                                for _, node in pairs(timelines) do
+                                    if node.tag == "timeline" and (node.attrs.id or "0") == parent_timeline then
+                                        local found = false
+                                        for index = 1, #ref do
+                                            if ref[index].name == node.attrs.name then
+                                                found = ref[index]
+                                                break
+                                            end
+                                        end
+                                        return found or {
+                                            type = "bone",
+                                            name = node.attrs.name,
+                                            url = animation_key .. "-" .. name .. "-" .. node.attrs.name
+                                        }, name .. "-" .. node.attrs.name
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+
                     for _, node in pairs(node.children) do
                         if node.tag == "mainline" then -- <mainline>
+
                             for _, node in pairs(node.children) do
                                 if node.tag == "key" then -- <key>
-
+                                    local bone_refs = node.children
                                     for _, node in pairs(node.children) do
 
                                         if node.tag == "bone_ref" or node.tag == "object_ref" then -- <bone_ref> or <object_ref>
+
                                             local type = node.tag == "bone_ref" and "bone" or "object"
+
                                             local timeline_key = node.attrs.timeline or ""
                                             local key = node.attrs.key or "0"
-                                            local id = (type == "bone" and "b" or "o")..(node.attrs.id or "0")
 
-                                            local parent = "b"..(node.attrs.parent or "")
-                                            local refs = reference
-                                            local ref = {
-                                                type = "bone",
-                                                name = id,
-                                                id = animation_key.."_"..timeline_key.."_"..(node.attrs.parent or "").."_"..id
-                                            }
-                                            if type == "object" then
-                                                ref.pivot = {
-                                                    type = "bone",
-                                                    name = id,
-                                                    id = animation_key.."_"..timeline_key.."_"..(node.attrs.parent or "").."_"..id.."_p"
-                                                }
-                                                ref[#ref + 1] = ref.pivot
-                                                ref.pivot.sprite = {
-                                                    type = "object",
-                                                    name = id,
-                                                    id = animation_key.."_"..timeline_key.."_"..(node.attrs.parent or "").."_"..id.."_s"
-                                                }
-                                                ref.pivot[#ref.pivot + 1] = ref.pivot.sprite
-                                            end
-                                            if not refs[tostring(id)] then
-                                                refs[tostring(id)] = ref
-                                            end
-                                            if refs[parent] then
-                                                ref.url = "/"..ref.id
-                                                local found = false
-                                                for index = 1, #refs[parent] do
-                                                    if refs[parent][index].name == id then
-                                                        found = true
-                                                        break
-                                                    end
-                                                end
-                                                if not found then
-                                                    refs[parent][#refs[parent] + 1] = ref
-                                                end
-                                            else
-                                                local found = false
-                                                for index = 1, #refs do
-                                                    if refs[index].name == id then
-                                                        found = true
-                                                        break
-                                                    end
-                                                end
-                                                if not found then
-                                                    refs[#refs + 1] = ref
-                                                end
-                                            end
-                                            ref.url = "/"..ref.id
-                                            urls[id] = ref.url
-                                            local z_index = node.attrs.z_index
+                                            local name
+
                                             for _, node in pairs(timelines) do
                                                 if node.tag == "timeline" and (node.attrs.id or "0") == timeline_key then
-                                                    if not animation[urls[id]] then
-                                                        animation[urls[id]] = {}
+                                                    name = node.attrs.name
+                                                    break
+                                                end
+                                            end
+
+                                            if name then
+                                                local parent = node.attrs.parent
+
+                                                local parent_ref, parent_name = get_parent(parent, bone_refs)
+
+                                                local ref = {
+                                                    type = "bone",
+                                                    name = name,
+                                                    url = animation_key .. "-" .. parent_name .. "-" .. name
+                                                }
+                                                if type == "object" then
+                                                    --ref.url = ref.url .. "-o"
+                                                    ref.pivot = {
+                                                        type = "bone",
+                                                        name = name.."-p",
+                                                        url = animation_key .. "-" .. parent_name .. "-" .. name .. "-p"
+                                                    }
+                                                    ref[#ref + 1] = ref.pivot
+                                                    ref.pivot.sprite = {
+                                                        type = "object",
+                                                        name = name.."-s",
+                                                        url = animation_key .. "-" .. parent_name .. "-" .. name .. "-s"
+                                                    }
+                                                    ref.pivot[#ref.pivot + 1] = ref.pivot.sprite
+                                                end
+                                                local found = false
+                                                for index = 1, #parent_ref do
+                                                    if parent_ref[index].name == name then
+                                                        found = true
+                                                        break
                                                     end
-                                                    for _, node in pairs(node.children) do
-                                                        if node.tag == "key" and node.attrs.id == key then
-                                                            local key_attrs = node.attrs
-                                                            node = node.children[1] or {}
-                                                            if node.tag == type then
-                                                                for key, value in pairs(key_attrs) do
-                                                                    if not node.attrs[key] then
-                                                                        node.attrs[key] = value
-                                                                    end
-                                                                end
-                                                                node.attrs.z_index = z_index
-                                                                if not animation[urls[id]][tostring(key)] then
-                                                                    if not ref.data then
-                                                                        ref.data = node.attrs
-                                                                        if ref.pivot then
-                                                                            ref.pivot.data = {}
-                                                                            ref.pivot.sprite.data = ref.data
+                                                end
+                                                if not found then
+                                                    parent_ref[#parent_ref + 1] = ref
+                                                end
+                                                local z_index = node.attrs.z_index                                         
+                                                for _, node in pairs(timelines) do
+                                                    if node.tag == "timeline" and (node.attrs.id or "0") == timeline_key then
+                                                        if not animation[ref.url] then
+                                                            animation[ref.url] = {}
+                                                        end
+                                                        for _, node in pairs(node.children) do
+                                                            if node.tag == "key" and node.attrs.id == key then
+                                                                local key_attrs = node.attrs
+                                                                node = node.children[1] or {}
+                                                                if node.tag == type then
+                                                                    for key, value in pairs(key_attrs) do
+                                                                        if not node.attrs[key] then
+                                                                            node.attrs[key] = value
                                                                         end
                                                                     end
-                                                                    animation[urls[id]][#animation[urls[id]] + 1] = node.attrs
-                                                                    animation[urls[id]][tostring(key)] = true
+                                                                    node.attrs.z_index = z_index
+                                                                    if not animation[ref.url][tostring(key)] then
+                                                                        if not ref.data then
+                                                                            ref.data = node.attrs
+                                                                            if ref.pivot then
+                                                                                ref.pivot.data = {}
+                                                                                ref.pivot.sprite.data = ref.data
+                                                                            end
+                                                                        end
+                                                                        animation[ref.url][#animation[ref.url] + 1] = node.attrs
+                                                                        animation[ref.url][tostring(key)] = true
+                                                                    end
                                                                 end
                                                             end
-                                                        end
-                                                    end -- for _, node in pairs(node.children)
-                                                end
-                                            end -- for _, node in pairs(timelines)
+                                                        end -- for _, node in pairs(node.children)
+                                                    end
+                                                end -- for _, node in pairs(timelines)
+                                            end
                                         end
                                     end -- for _, node in pairs(node.children)
                                 end
@@ -222,14 +255,14 @@ local function despriter(opts)
             end -- for _, node in pairs(node.children)
         end
     end -- for _, node in pairs(tab.children[1].children)
-    
+
     local atlas = {}
     for index = 1, #folders do
         local file = folders[index]
         local image_file = io.open(path..file.name, "r")
         if not image_file then error(string.format("The image file %q is missing from the same directory as the %s.scml file. Please make sure all required image files are present and try again.", file.name, name)) end
         image_file:close()
-        atlas[#atlas + 1] = string.format("images {\n    image: %q\n    pivot_x: %.8f\n    pivot_y: %.8f\n}", path..file.name, tonumber(file.pivot_x or 0.5), 1 - tonumber(file.pivot_y or 0.5))
+        atlas[#atlas + 1] = string.format("images {\n    image: %q\n    pivot_x: %.3f\n    pivot_y: %.3f\n}", path..file.name, tonumber(file.pivot_x or 0.5), 1 - tonumber(file.pivot_y or 0.5))
     end
     atlas[#atlas + 1] = string.format("extrude_borders: 2\n")
 
@@ -244,16 +277,38 @@ local function despriter(opts)
         local c = math.cos(half)
         return { x = 0, y = 0, z = s, w = c }
     end
-    
+
     for index = 1, #entities do
         local entity = entities[index]
-
+        --pprint(entity.references)
         local collection = {
             string.format([[name: "%s"]], entity.name),
-                          [[scale_along_z: 0]]
+            [[scale_along_z: 0]]
         }
 
         local references = entity.references
+
+        local function fix_scale(refs, mul_scale_x, mul_scale_y)
+            mul_scale_x = mul_scale_x or 1
+            mul_scale_y = mul_scale_y or 1
+            print("aqui")
+            for index = 1, #refs do
+                local ref = refs[index]
+                if ref.data.scale_x then
+                    ref.data.scale_x = tonumber(ref.data.scale_x) * mul_scale_x
+                    mul_scale_x = ref.data.scale_x
+                    print(mul_scale_x)
+                end
+                if ref.data.scale_y then
+                    ref.data.scale_y = tonumber(ref.data.scale_y) * mul_scale_y
+                    mul_scale_y = ref.data.scale_y
+                    print(mul_scale_y)
+                end
+                if ref.type == "bone" then
+                    fix_scale(ref, mul_scale_x, mul_scale_y)
+                end
+            end
+        end
 
         local function generate_references(current, refs)
             local after = {}
@@ -262,39 +317,40 @@ local function despriter(opts)
                 local ref = refs[index]
 
                 if ref.type == "bone" then
-                    current[#current + 1] =     string.format([[  children: "%s"]], ref.id)
+                    current[#current + 1] =     string.format([[  children: "%s"]], ref.url)
                     after[#after + 1] =                       [[embedded_instances {]]
-                    after[#after + 1] =         string.format([[  id: "%s"]], ref.id)
-                    if ref.data.x or ref.data.y or ref.data.z_index then
-                        after[#after + 1] =                   [[  position {]]
-                        if ref.data.x then
-                            after[#after + 1] = string.format([[    x: %.8f]], ref.data.x)
-                        end
-                        if ref.data.y then
-                            after[#after + 1] = string.format([[    y: %.8f]], ref.data.y)
-                        end
-                        if ref.data.z_index then
-                            after[#after + 1] = string.format([[    z: %.8f]], (ref.data.z_index * .00000001))
-                        end
-                        after[#after + 1] =                   [[  }]]
-                    end
+                    after[#after + 1] =         string.format([[  id: "%s"]], ref.url)
                     if ref.data.scale_x or ref.data.scale_y then
                         after[#after + 1] =                   [[  scale3 {]]
                         if ref.data.scale_x then
-                            after[#after + 1] = string.format([[    x: %.8f]], ref.data.scale_x)
+                            after[#after + 1] = string.format([[    x: %.3f]], ref.data.scale_x)
                         end
                         if ref.data.scale_y then
-                            after[#after + 1] = string.format([[    y: %.8f]], ref.data.scale_y)
+                            after[#after + 1] = string.format([[    y: %.3f]], ref.data.scale_y)
                         end
                         after[#after + 1] =                   [[  }]]
                     end
                     if ref.data.angle then
                         local quat = quat_from_z_deg(tonumber(ref.data.angle))
                         after[#after + 1] =                   [[  rotation {]]
-                        after[#after + 1] =     string.format([[    z: %.8f]], quat.z)
-                        after[#after + 1] =     string.format([[    w: %.8f]], quat.w)
+                        after[#after + 1] =     string.format([[    z: %.3f]], quat.z)
+                        after[#after + 1] =     string.format([[    w: %.3f]], quat.w)
                         after[#after + 1] =                   [[  }]]
                     end
+                    if ref.data.x or ref.data.y or ref.data.z_index then
+                        after[#after + 1] =                   [[  position {]]
+                        if ref.data.x then
+                            after[#after + 1] = string.format([[    x: %.3f]], ref.data.x)
+                        end
+                        if ref.data.y then
+                            after[#after + 1] = string.format([[    y: %.3f]], ref.data.y)
+                        end
+                        if ref.data.z_index then
+                            after[#after + 1] = string.format([[    z: %.3f]], (ref.data.z_index * .01))
+                        end
+                        after[#after + 1] =                   [[  }]]
+                    end
+
                     --after[#after + 1] = string.format("  data: %q", "")
                     local results = generate_references(after, ref)
                     after[#after + 1] =                   [[}]]
@@ -306,9 +362,9 @@ local function despriter(opts)
                     local image = assert(folders[ref.data.folder..":"..ref.data.file])
 
                     local default_animation = string.match("/"..image.name, "^.*/(.-)%..-$")
-                    
+
                     data[#data + 1] =                       [[  "embedded_components {\n"]]
-                    data[#data + 1] =         string.format([[  "  id: \"%s\"\n"]], ref.id)
+                    data[#data + 1] =         string.format([[  "  id: \"%s\"\n"]], ref.url)
                     data[#data + 1] =                       [[  "  type: \"sprite\"\n"]]
                     data[#data + 1] =         string.format([[  "  data: \"default_animation: \\\"%s\\\"\\n"]], default_animation)
                     data[#data + 1] =         string.format([[  "material: \\\"%s\\\"\\n"]], material)
@@ -340,6 +396,7 @@ local function despriter(opts)
         collection[#collection + 1] =                   [[}]]
 
         for anim, refs in pairs(references) do
+            --fix_scale(refs)
             collection[#collection + 1] =               [[embedded_instances {]]
             collection[#collection + 1] = string.format([[  id: "%s"]], anim)
             local results = generate_references(collection, refs)
@@ -353,152 +410,157 @@ local function despriter(opts)
         local script_animations = {}
 
         for animation, objects in pairs(entity.animations) do
-            
+
             script_reset[#script_reset + 1] = "-- "..animation
             script_reset[#script_reset + 1] = string.format("if not animation or animation == %q then", animation)
             script_animations[#script_animations + 1] = string.format("[%q] = {", animation)
             script_animations[#script_animations + 1] = string.format([[    run = function(self)]], animation)
-            script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], "/"..animation)
-            for url, frames in pairs(objects) do
-                if string.match(url, "^/") then
-                    local frame = frames[1]
-                    local type = string.match(url, "o") and "object" or "bone"
-                    if frame then
-                        --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
-                        if frame.x then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", %.8f)]], url, tonumber(frame.x))
-                        end
-                        if frame.y then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.8f)]], url, tonumber(frame.y))
-                        end
-                        if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.8f)]], url, tonumber(frame.z_index) * .00000001)
-                        end
-                        if frame.scale_x then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.x", %.8f)]], url, tonumber(frame.scale_x))
-                        end
-                        if frame.scale_y then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.y", %.8f)]], url, tonumber(frame.scale_y))
-                        end
-                        if frame.angle then
-                            local quat = quat_from_z_deg(tonumber(frame.angle))
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.z", %.8f)]], url, quat.z)
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.w", %.8f)]], url, quat.w)
-                        end
-                        if frame.a then
+                script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], animation)
+                for url, frames in pairs(objects) do
+                    if string.match(url, "%-") then
+                        local frame = frames[1]
+
+                        if frame then
+                            local type = frame.folder and "object" or "bone"
+                            --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
+                            if frame.scale_x then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.x", %.3f)]], url, tonumber(frame.scale_x))
+                            end
+                            if frame.scale_y then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.y", %.3f)]], url, tonumber(frame.scale_y))
+                            end
+                            if frame.angle then
+                                local quat = quat_from_z_deg(tonumber(frame.angle))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.z", %.3f)]], url, quat.z)
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.w", %.3f)]], url, quat.w)
+                            end
+                            if frame.x then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", %.3f)]], url, tonumber(frame.x))
+                            end
+                            if frame.y then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.3f)]], url, tonumber(frame.y))
+                            end
+                            if frame.z_index then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
+                            end
+                            if frame.a then
+                                if type == "object" then
+                                    script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame.a))
+                                end
+                            end 
                             if type == "object" then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.8f)]], url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.a))
+                                if frame.pivot_x then
+                                    script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x))
+                                end
+                                if frame.pivot_y then
+                                    script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
+                                end
                             end
-                        end 
-                        if type == "object" then
-                            if frame.pivot_x then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.8f)]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_x))
+                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
+                            if type == "object" then
+                                script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p")
+                                script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p#"..url.."-s")
                             end
-                            if frame.pivot_y then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.8f))]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_y))
+                            --script_reset[#script_reset + 1] = [[    end]]
+                        end
+                        --script_animations[#script_animations + 1] = string.format([[        if go.exists(%q) then]], url)
+
+                        local first = frame
+                        local enabled_objects = {}
+
+                        for index = 1, #frames do
+                            local frame = frames[index]
+                            local type = frame.folder and "object" or "bone"
+                            local previous = frames[index - 1] or first or {}
+                            local current_time = tonumber(frame.time or 0) / 1000
+                            local total_time = tonumber(objects.length) / 1000
+                            local next_time = frames[index + 1]
+
+                            if next_time and next_time.time then
+                                next_time = (tonumber(next_time.time) / 1000) - current_time
+                            else
+                                next_time = total_time - current_time
                             end
-                        end
-                        script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
-                        if type == "object" then
-                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."_p")
-                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."_p#"..string.sub(url, 2).."_s")
-                        end
-                        --script_reset[#script_reset + 1] = [[    end]]
-                    end
-                    --script_animations[#script_animations + 1] = string.format([[        if go.exists(%q) then]], url)
 
-                    local first = frame
-                    local enabled_objects = {}
+                            local tab = "        "
+                            local has_animation = false
+                            local lines = {}
 
-                    for index = 1, #frames do
-                        local frame = frames[index]
-                        local previous = frames[index - 1] or first or {}
-                        local current_time = tonumber(frame.time or 0) / 1000
-                        local total_time = tonumber(objects.length) / 1000
-                        local next_time = frames[index + 1]
+                            if not enabled_objects[url] and (type == "object" or (type == "bone" and frame.a ~= "0")) then
+                                table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
+                                enabled_objects[url] = true
 
-                        if next_time and next_time.time then
-                            next_time = (tonumber(next_time.time) / 1000) - current_time
-                        else
-                            next_time = total_time - current_time
-                        end
+                                if type == "object" then
+                                    table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p"))
+                                    table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p#"..url.."-s"))
+                                end
+                                has_animation = true
+                            end
 
-                        local tab = "        "
-                        local has_animation = false
-                        local lines = {}
+                            local function animate_if_changed(prop, val, prev, path)
+                                if val and prev ~= val then
+                                    table.insert(lines, tab..string.format([[go.animate(%q, "%s", go.PLAYBACK_ONCE_FORWARD, %.3f, go.EASING_LINEAR, %.3f)]], path or url, prop, tonumber(val), next_time))
+                                    has_animation = true
+                                end
+                            end
 
-                        if not enabled_objects[url] and (type == "object" or (type == "bone" and frame.a ~= "0")) then
-                            table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
-                            enabled_objects[url] = true
+                            animate_if_changed("scale.x", frame.scale_x, previous.scale_x)
+                            animate_if_changed("scale.y", frame.scale_y, previous.scale_y)
+
+                            if frame.angle and previous.angle ~= frame.angle then
+                                local quat = quat_from_z_deg(tonumber(frame.angle))
+                                table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.3f, go.EASING_LINEAR, %.3f)]], url, quat.z, next_time))
+                                table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.3f, go.EASING_LINEAR, %.3f)]], url, quat.w, next_time))
+                                has_animation = true
+                            end
+
+                            animate_if_changed("position.x", frame.x, previous.x)
+                            animate_if_changed("position.y", frame.y, previous.y)
+                            animate_if_changed("position.z", frame.z_index and frame.z_index * .01, previous.z_index and previous.z_index * .01)
+
+                            if type == "object" and frame.a and previous.a ~= frame.a then
+                                table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, go.EASING_LINEAR, %.3f)]], url.."-p#"..url.."-s", tonumber(frame.a), next_time))
+                                has_animation = true
+                            end
 
                             if type == "object" then
-                                table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."_p"))
-                                table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."_p#"..string.sub(url, 2).."_s"))
+                                if frame.pivot_x and previous.pivot_x ~= frame.pivot_x then
+                                    table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").x * %.3f, go.EASING_LINEAR, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x), next_time))
+                                    has_animation = true
+                                end
+                                if frame.pivot_y and previous.pivot_y ~= frame.pivot_y then
+                                    table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").y * (1-%.3f), go.EASING_LINEAR, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y), next_time))
+                                    has_animation = true
+                                end
                             end
-                            has_animation = true
-                        end
 
-                        local function animate_if_changed(prop, val, prev, path)
-                            if val and prev ~= val then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "%s", go.PLAYBACK_ONCE_FORWARD, %.8f, go.EASING_LINEAR, %.8f)]], path or url, prop, tonumber(val), next_time))
-                                has_animation = true
+                            if current_time ~= 0 and has_animation then
+                                script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function()]], current_time)
+                                    for _, line in ipairs(lines) do
+                                        script_animations[#script_animations + 1] = "    " .. line
+                                    end
+                                    script_animations[#script_animations + 1] = [[        end))]]
+                                elseif current_time == 0 then
+                                    for _, line in ipairs(lines) do
+                                        script_animations[#script_animations + 1] = line
+                                    end
+                                end
                             end
-                        end
 
-                        animate_if_changed("position.x", frame.x, previous.x)
-                        animate_if_changed("position.y", frame.y, previous.y)
-                        animate_if_changed("position.z", frame.z_index and frame.z_index * .00000001, previous.z_index and previous.z_index * .00000001)
-                        animate_if_changed("scale.x", frame.scale_x, previous.scale_x)
-                        animate_if_changed("scale.y", frame.scale_y, previous.scale_y)
-
-                        if frame.angle and previous.angle ~= frame.angle then
-                            local quat = quat_from_z_deg(tonumber(frame.angle))
-                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.8f, go.EASING_LINEAR, %.8f)]], url, quat.z, next_time))
-                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.8f, go.EASING_LINEAR, %.8f)]], url, quat.w, next_time))
-                            has_animation = true
-                        end
-
-                        if type == "object" and frame.a and previous.a ~= frame.a then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.8f, go.EASING_LINEAR, %.8f)]], url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.a), next_time))
-                            has_animation = true
-                        end
-
-                        if type == "object" then
-                            if frame.pivot_x and previous.pivot_x ~= frame.pivot_x then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").x * %.8f, go.EASING_LINEAR, %.8f)]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_x), next_time))
-                                has_animation = true
-                            end
-                            if frame.pivot_y and previous.pivot_y ~= frame.pivot_y then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").y * (1-%.8f), go.EASING_LINEAR, %.8f)]], url.."_p", url.."_p#"..string.sub(url, 2).."_s", tonumber(frame.pivot_y), next_time))
-                                has_animation = true
-                            end
-                        end
-
-                        if current_time ~= 0 and has_animation then
-                            script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.8f, false, function()]], current_time)
-                            for _, line in ipairs(lines) do
-                                script_animations[#script_animations + 1] = "    " .. line
-                            end
-                            script_animations[#script_animations + 1] = [[        end))]]
-                        elseif current_time == 0 then
-                            for _, line in ipairs(lines) do
-                                script_animations[#script_animations + 1] = line
-                            end
+                            --script_animations[#script_animations + 1] = [[        end]]
                         end
                     end
-                        
-                    --script_animations[#script_animations + 1] = [[        end]]
+                    script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], animation)
+                    script_reset[#script_reset + 1] = "end"
+                    script_animations[#script_animations + 1] = [[    end,]]
+                    script_animations[#script_animations + 1] = string.format([[    loop = %s,]], objects.looping and "true" or "false")
+                    script_animations[#script_animations + 1] = string.format([[    length = %.3f]], tonumber(objects.length) / 1000)
+                    script_animations[#script_animations + 1] = [[},]]
                 end
-            end
-            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], "/"..animation)
-            script_reset[#script_reset + 1] = "end"
-            script_animations[#script_animations + 1] = [[    end,]]
-            script_animations[#script_animations + 1] = string.format([[    loop = %s,]], objects.looping and "true" or "false")
-            script_animations[#script_animations + 1] = string.format([[    length = %.8f]], tonumber(objects.length) / 1000)
-            script_animations[#script_animations + 1] = [[},]]
-        end
-        
-        local script = [===[
+
+                local script = [===[
+-- Auto-generated by https://github.com/EVEVGames/DeSpriter
+
 go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
@@ -594,7 +656,7 @@ end
         collection_file:write(table.concat(collection, "\n"))
         collection_file:close()
     end
-    
+
 end
 
 return {
