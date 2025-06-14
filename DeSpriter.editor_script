@@ -294,16 +294,32 @@ local function DeSpriter(opts)
             f_scale_y = f_scale_y or 1
             for index = 1, #refs do
                 local ref = refs[index]
-                ref.data.x = tonumber(ref.data.x or 0) * f_scale_x
-                ref.data.y = tonumber(ref.data.y or 0) * f_scale_y
-                ref.data.f_scale_x = tonumber(ref.data.scale_x or 1) * f_scale_x
-                ref.data.f_scale_y = tonumber(ref.data.scale_y or 1) * f_scale_y
+                if ref.data.x then
+                    ref.data.x = ref.data.x * f_scale_x
+                end
+                if ref.data.y then
+                    ref.data.y = ref.data.y * f_scale_y
+                end
+                if ref.data.scale_x then
+                    ref.data.f_scale_x = ref.data.scale_x * f_scale_x
+                end
+                if ref.data.scale_y then
+                    ref.data.f_scale_y = ref.data.scale_y * f_scale_y
+                end
                 for index2 = 1, #animations[anim][ref.url] do
                     local frame = animations[anim][ref.url][index2]
-                    frame.x = tonumber(frame.x or 0) * f_scale_x
-                    frame.y = tonumber(frame.y or 0) * f_scale_y
-                    frame.f_scale_x = tonumber(frame.scale_x or 1) * f_scale_x
-                    frame.f_scale_y = tonumber(frame.scale_y or 1) * f_scale_y
+                    if frame.x then
+                        frame.x = frame.x * f_scale_x
+                    end
+                    if frame.y then
+                        frame.y = frame.y * f_scale_y
+                    end
+                    if frame.scale_x then
+                        frame.f_scale_x = frame.scale_x * f_scale_x
+                    end
+                    if frame.scale_y then
+                        frame.f_scale_y = frame.scale_y * f_scale_y
+                    end
                 end
                 if ref.type == "bone" and not ref.pivot then
                     fix_scale(anim, ref, ref.data.f_scale_x, ref.data.f_scale_y)
