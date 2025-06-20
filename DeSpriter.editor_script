@@ -264,16 +264,6 @@ local function DeSpriter(opts)
         end
     end -- for _, node in pairs(tab.children[1].children)
 
-    --[[
-    devemos alterar aqui
-    cada file in folder tem um atlas (o padrão é 0)
-    caso haja um atlas diferente de 0, devemos criar o arquivo
-    passos:
-    obter o total maximo de atlas
-    criar um for de atlas
-    pronto!
-    ]]
-
     local atlas_max = 0
     for index = 1, #folders do
         atlas_max = math.max(atlas_max, folders[index].atlas)
