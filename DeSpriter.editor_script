@@ -75,6 +75,8 @@ local function DeSpriter(opts)
     end
 
     local folders = {}
+    local files = {}
+    
     local entities = {}
 
     for _, node in pairs(tab.children[1].children) do
@@ -82,6 +84,12 @@ local function DeSpriter(opts)
             local folder = node.attrs.id or ""
             for _, node in pairs(node.children) do
                 if node.tag == "file" then -- <file>
+
+                    local file_id = string.match("/"..node.attrs.name, "^.*/(.-)%..-$")
+
+                    files[file_id] = files[file_id] and (files[file_id]+1) or 0
+                    node.attrs.atlas = files[file_id] 
+
                     folders[#folders + 1] = node.attrs
                     folders[folder..":"..(node.attrs.id or "")] = node.attrs
                 end
@@ -256,19 +264,49 @@ local function DeSpriter(opts)
         end
     end -- for _, node in pairs(tab.children[1].children)
 
-    local atlas = {}
-    for index = 1, #folders do
-        local file = folders[index]
-        local image_file = io.open(path..file.name, "r")
-        if not image_file then error(string.format("The image file %q is missing from the same directory as the %s.scml file. Please make sure all required image files are present and try again.", file.name, name)) end
-        image_file:close()
-        atlas[#atlas + 1] = string.format("images {\n    image: %q\n    pivot_x: %.3f\n    pivot_y: %.3f\n}", path..file.name, tonumber(file.pivot_x or 0.5), 1 - tonumber(file.pivot_y or 0.5))
-    end
-    atlas[#atlas + 1] = string.format("extrude_borders: 2\n")
+    --[[
+    devemos alterar aqui
+    cada file in folder tem um atlas (o padrão é 0)
+    caso haja um atlas diferente de 0, devemos criar o arquivo
+    passos:
+    obter o total maximo de atlas
+    criar um for de atlas
+    pronto!
+    ]]
 
-    local atlas_file = assert(io.open(path..name..".atlas", "w"))
-    atlas_file:write(table.concat(atlas, "\n"))
-    atlas_file:close()
+    local atlas_max = 0
+    for index = 1, #folders do
+        atlas_max = math.max(atlas_max, folders[index].atlas)
+    end
+
+    for index = 0, atlas_max do
+        local atlas = {}
+        for index2 = 1, #folders do
+            local file = folders[index2]
+            if file.atlas == index then
+                local image_file = io.open(path..file.name, "r")
+                if not image_file then error(string.format("The image file %q is missing from the same directory as the %s.scml file. Please make sure all required image files are present and try again.", file.name, name)) end
+                image_file:close()
+                atlas[#atlas + 1] = string.format([==[
+images {
+    image: %q
+    pivot_x: %.3f
+    pivot_y: %.3f
+}
+]==],
+                    path..file.name,
+                    tonumber(file.pivot_x or 0.5),
+                    1 - tonumber(file.pivot_y or 0.5)
+                )
+            end
+        end
+        atlas[#atlas + 1] = string.format("extrude_borders: 2\n")
+
+        local atlas_file = assert(io.open(path..name..(index==0 and "" or ("_"..index))..".atlas", "w"))
+        atlas_file:write(table.concat(atlas, "\n"))
+        atlas_file:close()
+
+    end
 
     local function quat_from_z_deg(angle_deg)
         local rad = math.rad(angle_deg)
@@ -387,7 +425,7 @@ local function DeSpriter(opts)
                 data[#data + 1] =         string.format([[  "material: \\\"%s\\\"\\n"]], material)
                 data[#data + 1] =                       [[  "textures {\\n"]]
                 data[#data + 1] =                       [[  "  sampler: \\\"texture_sampler\\\"\\n"]]
-                data[#data + 1] =         string.format([[  "  texture: \\\"/%s\\\"\\n"]], path..name..".atlas")
+                data[#data + 1] =         string.format([[  "  texture: \\\"/%s\\\"\\n"]], path..name..(image.atlas==0 and "" or ("_"..image.atlas))..".atlas")
                 data[#data + 1] =                       [[  "}\\n"]]
                 data[#data + 1] =                       [[  "\"\n"]]
                 if ref.data.f_scale_x or ref.data.f_scale_y then
