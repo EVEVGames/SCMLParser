@@ -1,0 +1,25 @@
+name: Format Lua with StyLua
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run StyLua action
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: false
+
+      - name: Run stylua manually
+        run: |
+          stylua DeSpriter.editor_script
