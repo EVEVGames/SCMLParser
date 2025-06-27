@@ -237,6 +237,10 @@ local function DeSpriter(opts)
                                                         end
                                                         for _, node in pairs(node.children) do
                                                             if node.tag == "key" and node.attrs.id == key then
+                                                                if not keyframes[node.attrs.time or "0"] then
+                                                                    keyframes[#keyframes + 1] = tonumber(node.attrs.time or 0)
+                                                                    keyframes[node.attrs.time or "0"] = true
+                                                                end
                                                                 local key_attrs = node.attrs
                                                                 node = node.children[1] or {}
                                                                 if node.tag == type then
@@ -308,6 +312,8 @@ images {
 
     end
 
+    table.sort(keyframes)
+
     for index = 1, #entities do
         local entity = entities[index]
 
@@ -319,40 +325,30 @@ images {
         local references = entity.references
         local animations = entity.animations
 
-        local function fix_scale(anim, refs, f_scale_x, f_scale_y)
-            f_scale_x = f_scale_x or 1
-            f_scale_y = f_scale_y or 1
+        local function traverse_scale(anim, refs, keyframe, _scale_x, _scale_y)
+            _scale_x = _scale_x or 1
+            _scale_y = _scale_y or 1
             for index = 1, #refs do
                 local ref = refs[index]
-                if ref.data.x then
-                    ref.data.x = ref.data.x * f_scale_x
-                end
-                if ref.data.y then
-                    ref.data.y = ref.data.y * f_scale_y
-                end
-                if ref.data.scale_x then
-                    ref.data.f_scale_x = ref.data.scale_x * f_scale_x
-                end
-                if ref.data.scale_y then
-                    ref.data.f_scale_y = ref.data.scale_y * f_scale_y
-                end
                 for index2 = 1, #animations[anim][ref.url] do
                     local frame = animations[anim][ref.url][index2]
-                    if frame.x then
-                        frame.x = frame.x * f_scale_x
-                    end
-                    if frame.y then
-                        frame.y = frame.y * f_scale_y
-                    end
-                    if frame.scale_x then
-                        frame.f_scale_x = frame.scale_x * f_scale_x
-                    end
-                    if frame.scale_y then
-                        frame.f_scale_y = frame.scale_y * f_scale_y
+                    if tonumber(frame.time or 0) >= keyframe then
+                        if frame.x then
+                            frame._x = frame.x * _scale_x
+                        end
+                        if frame.y then
+                            frame._y = frame.y * _scale_y
+                        end
+                        if frame.scale_x then
+                            frame._scale_x = frame.scale_x * _scale_x
+                        end
+                        if frame.scale_y then
+                            frame._scale_y = frame.scale_y * _scale_y
+                        end
                     end
                 end
                 if ref.type == "bone" and not ref.pivot then
-                    fix_scale(anim, ref, ref.data.f_scale_x, ref.data.f_scale_y)
+                    traverse_scale(anim, ref, keyframe, ref.data._scale_x, ref.data._scale_y)
                 end
             end
         end
@@ -420,13 +416,13 @@ images {
                     data[#data + 1] =         string.format([[  "  texture: \\\"/%s\\\"\\n"]], path..name..(image.atlas==0 and "" or ("_"..image.atlas))..".atlas")
                     data[#data + 1] =                       [[  "}\\n"]]
                     data[#data + 1] =                       [[  "\"\n"]]
-                    if ref.data.f_scale_x or ref.data.f_scale_y then
+                    if ref.data._scale_x or ref.data._scale_y then
                         data[#data + 1] =                   [[  "  scale {\n"]]
-                        if ref.data.f_scale_x then
-                            data[#data + 1] = string.format([[  "    x: %.3f\n"]], ref.data.f_scale_x)
+                        if ref.data._scale_x then
+                            data[#data + 1] = string.format([[  "    x: %.3f\n"]], ref.data._scale_x)
                         end
-                        if ref.data.f_scale_y then
-                            data[#data + 1] = string.format([[  "    y: %.3f\n"]], ref.data.f_scale_y)
+                        if ref.data._scale_y then
+                            data[#data + 1] = string.format([[  "    y: %.3f\n"]], ref.data._scale_y)
                         end
                         data[#data + 1] =                   [[  "  }\n"]]
                     end
@@ -453,7 +449,11 @@ images {
         collection[#collection + 1] =                   [[}]]
 
         for anim, refs in pairs(references) do
-            fix_scale(anim, refs) -- https://github.com/EVEVGames/DeSpriter/issues/1
+
+            -- https://github.com/EVEVGames/DeSpriter/issues/1
+            for index = 1, #keyframes do
+                traverse_scale(anim, refs, keyframes[index])
+            end
 
             collection[#collection + 1] =               [[embedded_instances {]]
             collection[#collection + 1] = string.format([[  id: "%s"]], anim)
@@ -481,22 +481,22 @@ images {
                     if frame then
                         local type = frame.folder and "object" or "bone"
                         --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
-                        if type == "object" and frame.f_scale_x then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.x", %.3f)]], url.."-p#"..url.."-s", tonumber(frame.f_scale_x))
+                        if type == "object" and frame._scale_x then
+                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.x", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_x))
                         end
-                        if type == "object" and frame.f_scale_y then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.y", %.3f)]], url.."-p#"..url.."-s", tonumber(frame.f_scale_y))
+                        if type == "object" and frame._scale_y then
+                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.y", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_y))
                         end
                         if frame.angle then
                             local quat = quat_from_z_deg(tonumber(frame.angle))
                             script_reset[#script_reset + 1] = string.format([[    go_set(%q, "rotation.z", %.3f)]], url, quat.z)
                             script_reset[#script_reset + 1] = string.format([[    go_set(%q, "rotation.w", %.3f)]], url, quat.w)
                         end
-                        if frame.x then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.x", %.3f)]], url, tonumber(frame.x))
+                        if frame._x then
+                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.x", %.3f)]], url, tonumber(frame._x))
                         end
-                        if frame.y then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.y", %.3f)]], url, tonumber(frame.y))
+                        if frame._y then
+                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
                         end
                         if frame.z_index then
                             script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
@@ -563,8 +563,8 @@ images {
                         end
 
                         if type == "object" then
-                            animate_if_changed("scale.x", frame.f_scale_x, previous.f_scale_x, url.."-p#"..url.."-s")
-                            animate_if_changed("scale.y", frame.f_scale_y, previous.f_scale_y, url.."-p#"..url.."-s")
+                            animate_if_changed("scale.x", frame._scale_x, previous._scale_x, url.."-p#"..url.."-s")
+                            animate_if_changed("scale.y", frame._scale_y, previous._scale_y, url.."-p#"..url.."-s")
                         end
 
                         if frame.angle and previous.angle ~= frame.angle then
@@ -574,8 +574,8 @@ images {
                             has_animation = true
                         end
 
-                        animate_if_changed("position.x", frame.x, previous.x)
-                        animate_if_changed("position.y", frame.y, previous.y)
+                        animate_if_changed("position.x", frame._x, previous._x)
+                        animate_if_changed("position.y", frame._y, previous._y)
                         animate_if_changed("position.z", frame.z_index and frame.z_index * .01, previous.z_index and previous.z_index * .01)
 
                         if type == "object" and frame.a and previous.a ~= frame.a then
