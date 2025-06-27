@@ -353,6 +353,24 @@ images {
             end
         end
 
+        local function traverse_alpha(anim, refs, keyframe, _a)
+            _a = _a or 1
+            for index = 1, #refs do
+                local ref = refs[index]
+                for index2 = 1, #animations[anim][ref.url] do
+                    local frame = animations[anim][ref.url][index2]
+                    if tonumber(frame.time or 0) >= keyframe then
+                        if frame.a then
+                            frame._a = frame.a * _a
+                        end
+                    end
+                end
+                if ref.type == "bone" and not ref.pivot then
+                    traverse_alpha(anim, ref, keyframe, ref.data._a)
+                end
+            end
+        end
+
         local function generate_references(current, refs)
             local after = {}
             local data = {}
@@ -453,6 +471,7 @@ images {
             -- https://github.com/EVEVGames/DeSpriter/issues/1
             for index = 1, #keyframes do
                 traverse_scale(anim, refs, keyframes[index])
+                traverse_alpha(anim, refs, keyframes[index])
             end
 
             collection[#collection + 1] =               [[embedded_instances {]]
@@ -501,10 +520,8 @@ images {
                         if frame.z_index then
                             script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
                         end
-                        if frame.a then
-                            if type == "object" then
-                                script_reset[#script_reset + 1] = string.format([[    go_set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame.a))
-                            end
+                        if type == "object" and frame._a then
+                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a))
                         end
                         if type == "object" then
                             if frame.pivot_x then
@@ -544,7 +561,7 @@ images {
                         local has_animation = false
                         local lines = {}
 
-                        if not enabled_objects[url] and (type == "object" or (type == "bone" and frame.a ~= "0")) then
+                        if not enabled_objects[url] then
                             table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
                             enabled_objects[url] = true
 
@@ -578,8 +595,8 @@ images {
                         animate_if_changed("position.y", frame._y, previous._y)
                         animate_if_changed("position.z", frame.z_index and frame.z_index * .01, previous.z_index and previous.z_index * .01)
 
-                        if type == "object" and frame.a and previous.a ~= frame.a then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(frame.a), next_time))
+                        if type == "object" and frame._a and previous._a ~= frame._a then
+                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a), next_time))
                             has_animation = true
                         end
 
