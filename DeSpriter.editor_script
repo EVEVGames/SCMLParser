@@ -325,48 +325,74 @@ images {
         local references = entity.references
         local animations = entity.animations
 
-        local function traverse_scale(anim, refs, keyframe, _scale_x, _scale_y)
-            _scale_x = _scale_x or 1
-            _scale_y = _scale_y or 1
+        local function traverse_scale(anim, refs, keyframe, parent)
+            parent = parent or {}
             for index = 1, #refs do
                 local ref = refs[index]
                 for index2 = 1, #animations[anim][ref.url] do
                     local frame = animations[anim][ref.url][index2]
-                    if tonumber(frame.time or 0) >= keyframe then
+                    local time = tonumber(frame.time or 0)
+                    if time >= keyframe then
+                        local _scale_x, _scale_y = 1, 1
+                        for index3 = #parent, 1, -1 do
+                            if tonumber(parent[index3].time or 0) <= time then
+                                _scale_x = parent[index3]._scale_x or _scale_x
+                                _scale_y = parent[index3]._scale_y or _scale_y
+                                break
+                            end
+                        end
                         if frame.x then
                             frame._x = frame.x * _scale_x
+                        else
+                            frame._x = 0
                         end
                         if frame.y then
                             frame._y = frame.y * _scale_y
+                        else
+                            frame._y = 0
                         end
                         if frame.scale_x then
                             frame._scale_x = frame.scale_x * _scale_x
+                        else
+                            frame._scale_x = _scale_x
                         end
                         if frame.scale_y then
                             frame._scale_y = frame.scale_y * _scale_y
+                        else
+                            frame._scale_y = _scale_y
                         end
                     end
                 end
                 if ref.type == "bone" and not ref.pivot then
-                    traverse_scale(anim, ref, keyframe, ref.data._scale_x, ref.data._scale_y)
+                    traverse_scale(anim, ref, keyframe, animations[anim][ref.url])
                 end
             end
         end
 
-        local function traverse_alpha(anim, refs, keyframe, _a)
-            _a = _a or 1
+        local function traverse_alpha(anim, refs, keyframe, parent)
+            parent = parent or {}
             for index = 1, #refs do
                 local ref = refs[index]
                 for index2 = 1, #animations[anim][ref.url] do
                     local frame = animations[anim][ref.url][index2]
-                    if tonumber(frame.time or 0) >= keyframe then
+                    local time = tonumber(frame.time or 0)
+                    if time >= keyframe then
+                        local _a = 1
+                        for index3 = #parent, 1, -1 do
+                            if tonumber(parent[index3].time or 0) <= time then
+                                _a = parent[index3]._a or _a
+                                break
+                            end
+                        end
                         if frame.a then
                             frame._a = frame.a * _a
+                        else
+                            frame._a = _a
                         end
                     end
                 end
                 if ref.type == "bone" and not ref.pivot then
-                    traverse_alpha(anim, ref, keyframe, ref.data._a)
+                    traverse_alpha(anim, ref, keyframe, animations[anim][ref.url])
                 end
             end
         end
@@ -473,6 +499,7 @@ images {
                 traverse_scale(anim, refs, keyframes[index])
                 traverse_alpha(anim, refs, keyframes[index])
             end
+            pprint(animations[anim])
 
             collection[#collection + 1] =               [[embedded_instances {]]
             collection[#collection + 1] = string.format([[  id: "%s"]], anim)
