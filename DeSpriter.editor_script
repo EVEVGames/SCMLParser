@@ -1,6 +1,6 @@
 -- (c) 2025 EVEVGames, Evandro C. MIT Licensed.
 
-local material = "/builtins/materials/sprite.material"
+local default_material = "/builtins/materials/sprite.material"
 
 local function xml(s)
     -- https://github.com/jonathanpoelen/lua-xmlparser
@@ -428,7 +428,7 @@ images {
                     data[#data + 1] =         string.format([[  "  id: \"%s\"\n"]], ref.url)
                     data[#data + 1] =                       [[  "  type: \"sprite\"\n"]]
                     data[#data + 1] =         string.format([[  "  data: \"default_animation: \\\"%s\\\"\\n"]], default_animation)
-                    data[#data + 1] =         string.format([[  "material: \\\"%s\\\"\\n"]], material)
+                    data[#data + 1] =         string.format([[  "material: \\\"%s\\\"\\n"]], default_material)
                     data[#data + 1] =                       [[  "textures {\\n"]]
                     data[#data + 1] =                       [[  "  sampler: \\\"texture_sampler\\\"\\n"]]
                     data[#data + 1] =         string.format([[  "  texture: \\\"/%s\\\"\\n"]], path..name..(image.atlas==0 and "" or ("_"..image.atlas))..".atlas")
