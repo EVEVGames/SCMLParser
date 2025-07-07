@@ -722,11 +722,11 @@ function init(self)
     end
 end
 
-local HASH_PLAY = hash("play")
-local HASH_STOP = hash("stop")
+local HASH_PLAY_ANIMATION = hash("play_animation")
+local HASH_STOP_ANIMATION = hash("stop_animation")
 
 function on_message(self, message_id, message)
-    if message_id == HASH_PLAY then
+    if message_id == HASH_PLAY_ANIMATION then
         local animation = message.animation or hashes[self.animation]
         if animation then
             stop_animation(self)
@@ -740,7 +740,7 @@ function on_message(self, message_id, message)
         else
             error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(names, ", ")))
         end
-    elseif message_id == HASH_STOP then
+    elseif message_id == HASH_STOP_ANIMATION then
         stop_animation()
     end
 end

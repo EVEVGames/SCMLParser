@@ -47,13 +47,13 @@ You can control the animation using Defold’s message system:
 - **Play an animation:**
 
   ```lua
-  msg.post("your_collection_name", "play", { animation = "animation_name", loop = false })
+  msg.post("your_collection_name", "play_animation", { animation = "animation_name", loop = false })
   ```
   
 - **Stop the current animation:**
 
   ```lua
-  msg.post("your_collection_name", "stop")
+  msg.post("your_collection_name", "stop_animation")
   ```
 
 > You can also instantiate multiple instances of the generated collection using Defold’s collectionfactory.
