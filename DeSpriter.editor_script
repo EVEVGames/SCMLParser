@@ -669,7 +669,6 @@ images {
 go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
-go.property("easing", 0) -- go.EASING_LINEAR
 
 local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
@@ -704,6 +703,7 @@ end
 local ERROR_MESSAGE = "Animation%%s not found. Available animations are: %%s."
 
 function init(self)
+    self.easing = go.EASING_LINEAR
     self.timers = {}
     stop_animation(self)
     if self.play then
