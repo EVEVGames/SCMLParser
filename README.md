@@ -1,6 +1,6 @@
-# DeSpriter
+# SCML Parser
 
-**DeSpriter** is a tool to import Spriter `.scml` animations directly into Defold as `.collection` files.
+**SCML Parser** is a tool to import Spriter `.scml` animations directly into Defold as `.collection` files.
 
 ![Defold](https://img.shields.io/badge/engine-Defold-blue?logo=defold&style=flat-square)
 ![Status](https://img.shields.io/badge/status-experimental-orange?style=flat-square)
@@ -10,7 +10,7 @@
 
 ## 📦 Installation
 
-1. Place the `DeSpriter.editor_script` file into any folder inside your Defold project's `assets`.
+1. Place the `SCMLParser.editor_script` file into any folder inside your Defold project's `assets`.
 2. Restart Defold, or press `Ctrl+Shift+R` (`Cmd+Shift+R` on macOS) to reload the editor script.
 
 ---
@@ -63,7 +63,7 @@ You can control the animation using Defold’s message system:
 
 ## 🧪 Status
 
-This is an initial but functional version of DeSpriter.
+This is an initial but functional version of SCML Parser.
 Bugs and limitations may exist — please report any issues with as much detail as possible.
 
 ---
