@@ -10,8 +10,18 @@
 
 ## 📦 Installation
 
-1. Place the `SCMLParser.editor_script` file into any folder inside your Defold project's `assets`.
-2. Restart Defold, or press `Ctrl+Shift+R` (`Cmd+Shift+R` on macOS) to reload the editor script.
+You can install SCMLParser as a dependency in your project by doing the following:
+
+1. In Defold, open your `game.project`.
+2. Go to the **Projects** tab, under **Dependencies**, and click the **+** button.
+3. Replace the `https://url.to/library` field with
+
+   ```
+   https://github.com/EVEVGames/SCMLParser/archive/refs/heads/main.zip
+   ```
+4. Save the project (important!).
+5. From the menu, select **Project → Fetch Libraries**.
+
 
 ---
 
