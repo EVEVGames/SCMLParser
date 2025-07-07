@@ -134,7 +134,7 @@ local function DeSpriter(opts)
                     end
 
                     local parents = {}
-
+                    local objects = {}
                     local timelines = node.children
 
                     local function get_parent(parent, bone_refs, ref, name)
@@ -185,7 +185,7 @@ local function DeSpriter(opts)
                                             local timeline_key = node.attrs.timeline or ""
                                             local key = node.attrs.key or "0"
 
-                                            local name
+                                            local name, reparented
 
                                             for _, node in pairs(timelines) do
                                                 if node.tag == "timeline" and (node.attrs.id or "0") == timeline_key then
@@ -196,6 +196,11 @@ local function DeSpriter(opts)
 
                                             if name then
                                                 local parent = node.attrs.parent
+
+                                                if objects[name] ~= (parent or "") then
+                                                    reparented = true
+                                                end
+                                                objects[name] = (parent or "")
 
                                                 local parent_ref, parent_name = get_parent(parent, bone_refs)
 
@@ -250,6 +255,7 @@ local function DeSpriter(opts)
                                                                         end
                                                                     end
                                                                     node.attrs.z_index = z_index
+                                                                    node.attrs._last = reparented
                                                                     if not animation[ref.url][tostring(key)] then
                                                                         if not ref.data then
                                                                             ref.data = node.attrs
@@ -329,11 +335,32 @@ images {
             parent = parent or {}
             for index = 1, #refs do
                 local ref = refs[index]
-                for index2 = 1, #animations[anim][ref.url] do
-                    local frame = animations[anim][ref.url][index2]
+                local obj = animations[anim][ref.url]
+                for index2 = 1, #parent do
+                    local time = tonumber(parent[index2].time)
+                    if time then
+                        local insert_at = #obj + 1
+                        local first_time = obj[1] and tonumber(obj[1].time or 0)
+                        for index3 = 1, #obj do
+                            if tonumber(obj[index3].time or 0) == time then
+                                insert_at = 0 -- exists
+                                break
+                            elseif tonumber(obj[index3].time or 0) > time and time >= first_time then
+                                insert_at = index3
+                                break
+                            end
+                        end
+                        if insert_at > 0 then
+                          table.insert(obj, insert_at, {time = time, _parent = true})
+                        end
+                    end
+                end
+                for index2 = 1, #obj do
+                    local frame = obj[index2]
                     local time = tonumber(frame.time or 0)
                     if time >= keyframe then
                         local _a, _scale_x, _scale_y = 1, 1, 1
+                        
                         for index3 = #parent, 1, -1 do
                             if tonumber(parent[index3].time or 0) <= time then
                                 _a = parent[index3]._a or _a
@@ -342,30 +369,30 @@ images {
                                 break
                             end
                         end
-                        if frame.a then
-                            frame._a = frame.a * _a
-                        else
-                            frame._a = _a
+                        local a, x, y, scale_x, scale_y
+                        for index3 = index2 - 1, 1, -1 do
+                            local this = obj[index3]
+                            if this and not this._parent then
+                                a = this.a
+                                x = this.x
+                                y = this.y
+                                scale_x = this.scale_x
+                                scale_y = this.scale_y
+                                break
+                            end
                         end
-                        if frame.x then
-                            frame._x = frame.x * _scale_x
+                        if frame._parent then
+                            frame._a =  _a * (a or 1)
+                            frame._x = _scale_x * (x or 1)
+                            frame._scale_x = _scale_x * (scale_x or 1)
+                            frame._y = _scale_y * (y or 1)
+                            frame._scale_y =  _scale_y * (scale_y or 1)
                         else
-                            frame._x = 0
-                        end
-                        if frame.y then
-                            frame._y = frame.y * _scale_y
-                        else
-                            frame._y = 0
-                        end
-                        if frame.scale_x then
-                            frame._scale_x = frame.scale_x * _scale_x
-                        else
-                            frame._scale_x = _scale_x
-                        end
-                        if frame.scale_y then
-                            frame._scale_y = frame.scale_y * _scale_y
-                        else
-                            frame._scale_y = _scale_y
+                            frame._a = (frame.a or 1) * _a
+                            frame._x = (frame.x or 0) * _scale_x
+                            frame._scale_x = (frame.scale_x or 1) * _scale_x
+                            frame._y = (frame.y or 0) * _scale_y
+                            frame._scale_y = (frame.scale_y or 1) * _scale_y
                         end
                     end
                 end
@@ -504,34 +531,34 @@ images {
                         local type = frame.folder and "object" or "bone"
                         --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
                         if type == "object" and frame._scale_x then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.x", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_x))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.x", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_x))
                         end
                         if type == "object" and frame._scale_y then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "scale.y", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_y))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.y", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_y))
                         end
                         if frame.angle then
                             local quat = quat_from_z_deg(tonumber(frame.angle))
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "rotation.z", %.3f)]], url, quat.z)
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "rotation.w", %.3f)]], url, quat.w)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.z", %.3f)]], url, quat.z)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.w", %.3f)]], url, quat.w)
                         end
                         if frame._x then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.x", %.3f)]], url, tonumber(frame._x))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", %.3f)]], url, tonumber(frame._x))
                         end
                         if frame._y then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
                         end
                         if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
                         end
                         if type == "object" and frame._a then
-                            script_reset[#script_reset + 1] = string.format([[    go_set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a))
                         end
                         if type == "object" then
                             if frame.pivot_x then
-                                script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x))
                             end
                             if frame.pivot_y then
-                                script_reset[#script_reset + 1] = string.format([[    go_set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
                             end
                         end
                         script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
@@ -550,14 +577,13 @@ images {
                         local frame = frames[index]
                         local type = frame.folder and "object" or "bone"
                         local previous = frames[index - 1] or first or {}
+                        local next = frames[index + 1] or first or {}
                         local current_time = tonumber(frame.time or 0) / 1000
                         local total_time = tonumber(objects.length) / 1000
-                        local next_time = frames[index + 1]
+                        local next_time = total_time - current_time
 
-                        if next_time and next_time.time then
-                            next_time = (tonumber(next_time.time) / 1000) - current_time
-                        else
-                            next_time = total_time - current_time
+                        if next.time then
+                            next_time = (tonumber(next.time) / 1000) - current_time
                         end
 
                         local tab = "        "
@@ -575,52 +601,52 @@ images {
                             has_animation = true
                         end
 
-                        local function animate_if_changed(prop, val, prev, path)
-                            if val and prev ~= val then
+                        local function animate_if_changed(prop, val, other, path)
+                            if val and other ~= val then
                                 table.insert(lines, tab..string.format([[go.animate(%q, "%s", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], path or url, prop, tonumber(val), next_time))
                                 has_animation = true
                             end
                         end
 
                         if type == "object" then
-                            animate_if_changed("scale.x", frame._scale_x, previous._scale_x, url.."-p#"..url.."-s")
-                            animate_if_changed("scale.y", frame._scale_y, previous._scale_y, url.."-p#"..url.."-s")
+                            animate_if_changed("scale.x", next._scale_x, frame._scale_x, url.."-p#"..url.."-s")
+                            animate_if_changed("scale.y", next._scale_y, frame._scale_y, url.."-p#"..url.."-s")
                         end
 
-                        if frame.angle and previous.angle ~= frame.angle then
-                            local quat = quat_from_z_deg(tonumber(frame.angle))
+                        if next.angle and frame.angle ~= next.angle then
+                            local quat = quat_from_z_deg(tonumber(next.angle))
                             table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url, quat.z, next_time))
                             table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url, quat.w, next_time))
                             has_animation = true
                         end
 
-                        animate_if_changed("position.x", frame._x, previous._x)
-                        animate_if_changed("position.y", frame._y, previous._y)
-                        animate_if_changed("position.z", frame.z_index and frame.z_index * .01, previous.z_index and previous.z_index * .01)
+                        animate_if_changed("position.x", next._x, frame._x)
+                        animate_if_changed("position.y", next._y, frame._y)
+                        animate_if_changed("position.z", next.z_index and next.z_index * .01, frame.z_index and frame.z_index * .01)
 
-                        if type == "object" and frame._a and previous._a ~= frame._a then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a), next_time))
+                        if type == "object" and next._a and frame._a ~= next._a then
+                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
                             has_animation = true
                         end
 
                         if type == "object" then
-                            if frame.pivot_x and previous.pivot_x ~= frame.pivot_x then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").x * %.3f, self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x), next_time))
+                            if next.pivot_x and frame.pivot_x ~= next.pivot_x then
+                                table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").x * %.3f, self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_x), next_time))
                                 has_animation = true
                             end
-                            if frame.pivot_y and previous.pivot_y ~= frame.pivot_y then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").y * (1-%.3f), self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y), next_time))
+                            if next.pivot_y and frame.pivot_y ~= next.pivot_y then
+                                table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").y * (1-%.3f), self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_y), next_time))
                                 has_animation = true
                             end
                         end
 
-                        if current_time ~= 0 and has_animation then
+                        if current_time ~= 0 and has_animation and next_time ~= 0 then
                             script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function()]], current_time)
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = "    " .. line
                             end
                             script_animations[#script_animations + 1] = [[        end))]]
-                        elseif current_time == 0 then
+                        elseif current_time == 0 and next_time ~= 0 then
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = line
                             end
@@ -646,13 +672,6 @@ go.property("loop", true)
 go.property("easing", 0) -- go.EASING_LINEAR
 
 local function stop_animation(self, handler, animation)
-    local go_set = go.set
-    if animation then
-        go_set = function(url, property, value)
-            go.animate(url, property, go.PLAYBACK_ONCE_FORWARD, value, self.easing, .05)
-        end
-    end
-
     go.cancel_animations("#")
     for index = #self.timers, 1, -1 do
         if timer.get_info(self.timers[index]) and handler ~= self.timers[index] then
