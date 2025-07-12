@@ -109,12 +109,35 @@ local function SCMLParser(opts)
             local entity = {
                 name = node.attrs.name,
                 references = {},
-                animations = {}
+                animations = {},
+                character_maps = {}
             }
             entities[#entities + 1] = entity
 
             for _, node in pairs(node.children) do
-                if node.tag == "animation" then -- <animation>
+                if node.tag == "character_map" then -- <character_map>
+                    local maps = {}
+                    entity.character_maps[#entity.character_maps + 1] = {
+                        id = node.attrs.id or "0",
+                        name = node.attrs.name or "",
+                        maps = maps
+                    }
+                    for _, node in pairs(node.children) do
+                        if node.tag == "map"and node.attrs.folder and node.attrs.file then -- <map>
+                            maps[#maps + 1] = {
+                                urls = {},
+                                folder = node.attrs.folder,
+                                file = node.attrs.file,
+                                target_folder = node.attrs.target_folder,
+                                target_file = node.attrs.target_file
+                            }
+                            if not entity.character_maps[node.attrs.folder..":"..node.attrs.file] then
+                                entity.character_maps[node.attrs.folder..":"..node.attrs.file] = {}
+                            end
+                            table.insert(entity.character_maps[node.attrs.folder..":"..node.attrs.file], maps[#maps])
+                        end
+                    end
+                elseif node.tag == "animation" then -- <animation>
                     local animation_key = node.attrs.id or "0"
 
                     entity.animations[node.attrs.name] = {
@@ -124,8 +147,6 @@ local function SCMLParser(opts)
 
                     entity.references[node.attrs.name] = {}
 
-                    local urls = {}
-
                     local animation = entity.animations[node.attrs.name]
                     local reference = entity.references[node.attrs.name]
 
@@ -133,7 +154,6 @@ local function SCMLParser(opts)
                         entity.default = node.attrs.name
                     end
 
-                    local parents = {}
                     local objects = {}
                     local timelines = node.children
 
@@ -168,7 +188,6 @@ local function SCMLParser(opts)
                             end
                         end
                     end
-
 
                     for _, node in pairs(node.children) do
                         if node.tag == "mainline" then -- <mainline>
@@ -330,6 +349,7 @@ images {
 
         local references = entity.references
         local animations = entity.animations
+        local character_maps = entity.character_maps
 
         local function traverse_refs(anim, refs, keyframe, parent)
             parent = parent or {}
@@ -450,10 +470,25 @@ images {
                         after[#after + 1] = results[index]
                     end
                 elseif ref.type == "object" then
-
                     local image = assert(folders[ref.data.folder..":"..ref.data.file])
-
                     local default_animation = string.match("/"..image.name, "^.*/(.-)%..-$")
+                    
+                    if character_maps[ref.data.folder..":"..ref.data.file] then
+                        for _, map in pairs(character_maps[ref.data.folder..":"..ref.data.file]) do
+                            local url = string.gsub(ref.url, "%-s$", "")
+                            if not map.urls[url] then
+                                map.urls[url] = true
+                                table.insert(map.urls, url)
+                            end
+                            map.atlas = image.atlas
+                            map.animation = default_animation
+                            if map.target_file and map.target_folder then
+                                local target = assert(folders[map.target_folder..":"..map.target_file])
+                                map.target_atlas = target.atlas
+                                map.target_animation = string.match("/"..target.name, "^.*/(.-)%..-$")
+                            end
+                        end
+                    end
 
                     data[#data + 1] =                       [[  "embedded_components {\n"]]
                     data[#data + 1] =         string.format([[  "  id: \"%s\"\n"]], ref.url)
@@ -595,8 +630,8 @@ images {
                             enabled_objects[url] = true
 
                             if type == "object" then
-                                table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p"))
-                                table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p#"..url.."-s"))
+                                --table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p"))
+                                table.insert(lines, tab..string.format([[if not self.hidden[%q] then msg.post(%q, "enable") end]], url, url.."-p#"..url.."-s"))
                             end
                             has_animation = true
                         end
@@ -663,6 +698,32 @@ images {
             script_animations[#script_animations + 1] = [[},]]
         end
 
+        local script_character_maps = {}
+        local script_reset_character_maps = {}
+
+        for index2 = 1, #character_maps do
+            local character_map = character_maps[index2]
+            script_character_maps[#script_character_maps + 1] = string.format("[%q] = function(self)", character_map.name)
+            for index3 = 1, #character_map.maps do
+                local map = character_map.maps[index3]
+                for index4 = 1, #map.urls do
+                    local url = map.urls[index4]
+                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.atlas==0 and "" or ("_"..map.atlas))..".a.texturesetc")
+                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.animation)
+                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[self.hidden[%q] = nil]], url)
+                    if map.target_animation then
+                        script_character_maps[#script_character_maps + 1] = string.format([[    go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.target_atlas==0 and "" or ("_"..map.target_atlas))..".a.texturesetc")
+                        script_character_maps[#script_character_maps + 1] = string.format([[    sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.target_animation)
+                        script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = nil]], url)
+                    else
+                        script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = true]], url)
+                        script_character_maps[#script_character_maps + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p#"..url.."-s")
+                    end
+                end
+            end
+            script_character_maps[#script_character_maps + 1] = "end,"
+        end
+
         local script = string.format([===[
 -- Auto-generated by https://github.com/EVEVGames/SCMLParser
 
@@ -685,6 +746,10 @@ local function stop_animation(self, handler, animation)
 
 end
 
+local function reset_character_maps(self)
+    %s
+end
+
 local function save_timer(self, handler)
     self.timers[#self.timers + 1] = handler
 end
@@ -693,11 +758,19 @@ local animations = {
     %s
 }
 
-local hashes, names = {}, {}
+local character_maps = {
+    %s
+}
+
+local animation_hashes, animation_names, character_maps_names = {}, {}, {}
 
 for animation in pairs(animations) do
-    names[#names + 1] = animation
-    hashes[hash(animation)] = animation
+    animation_names[#animation_names + 1] = animation
+    animation_hashes[hash(animation)] = animation
+end
+
+for character_map in pairs(character_maps) do
+    character_maps_names[#character_maps_names + 1] = character_map
 end
 
 local ERROR_MESSAGE = "Animation%%s not found. Available animations are: %%s."
@@ -705,9 +778,10 @@ local ERROR_MESSAGE = "Animation%%s not found. Available animations are: %%s."
 function init(self)
     self.easing = go.EASING_LINEAR
     self.timers = {}
+    self.hidden = {}
     stop_animation(self)
     if self.play then
-        local animation = hashes[self.animation]
+        local animation = animation_hashes[self.animation]
         if animation then
             animations[animation].run(self)
             if self.loop then
@@ -717,17 +791,14 @@ function init(self)
                 end))
             end
         else
-            error(string.format(ERROR_MESSAGE, "", table.concat(names, ", ")))
+            error(string.format(ERROR_MESSAGE, "", table.concat(animation_names, ", ")))
         end
     end
 end
 
-local HASH_PLAY_ANIMATION = hash("play_animation")
-local HASH_STOP_ANIMATION = hash("stop_animation")
-
-function on_message(self, message_id, message)
-    if message_id == HASH_PLAY_ANIMATION then
-        local animation = message.animation or hashes[self.animation]
+function on_message(self, message_id, message, sender)
+    if message_id == hash("play_animation") then
+        local animation = message.animation or animation_hashes[self.animation]
         if animation then
             stop_animation(self)
             animations[animation].run(self)
@@ -738,17 +809,34 @@ function on_message(self, message_id, message)
                 end))
             end
         else
-            error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(names, ", ")))
+            error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(animation_names, ", ")))
         end
-    elseif message_id == HASH_STOP_ANIMATION then
+    elseif message_id == hash("stop_animation") then
         stop_animation()
+    elseif message_id == hash("list_animations") then
+        msg.post(sender, hash("animations_list"), animation_names)
+    elseif message_id == hash("list_character_maps") then
+        msg.post(sender, hash("character_maps_list"), character_maps_names)
+    elseif message_id == hash("apply_character_maps") then
+        for index = 1, #message do
+            local character_map = message[index]
+            if character_maps[character_map] then
+                character_maps[character_map](self)
+            else
+                error(string.format("The character map %%q does not exist.", character_map))
+            end
+        end
+    elseif message_id == hash("reset_character_maps") then
+        reset_character_maps(self)
     end
 end
 ]===],
             entity.default,
             --entity.animations[entity.default].looping and "true" or "false",
             table.concat(script_reset, "\n    "),
-            table.concat(script_animations, "\n    ")
+            table.concat(script_reset_character_maps, "\n    "),
+            table.concat(script_animations, "\n    "),
+            table.concat(script_character_maps, "\n    ")
         )
 
         local script_file = assert(io.open(path..entity.name..".script", "w"))
