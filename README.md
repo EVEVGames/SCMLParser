@@ -66,6 +66,30 @@ You can control the animation using Defold’s message system:
   msg.post("your_collection_name", "stop_animation")
   ```
 
+- **List available animations:**
+
+  ```lua
+  msg.post("your_collection_name", "list_animations")
+  ```
+
+- **List available character maps:**
+
+  ```lua
+  msg.post("your_collection_name", "list_character_maps")
+  ```
+
+- **Apply a sequence of character maps:**
+
+  ```lua
+  msg.post("your_collection_name", "apply_character_maps", {"myCharmap1", "Charmap 2", ... })
+  ```
+
+- **Reset all character maps:**
+
+  ```lua
+  msg.post("your_collection_name", "reset_character_maps")
+  ```
+
 > You can also instantiate multiple instances of the generated collection using Defold’s collectionfactory.
 > Refer to the Defold documentation for more details.
 
