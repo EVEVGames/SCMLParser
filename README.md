@@ -66,13 +66,13 @@ You can control the animation using Defold’s message system:
   msg.post("your_collection_name", "stop_animation")
   ```
 
-- **List available animations:**
+- **Get available animations and respond to the sender as array:**
 
   ```lua
   msg.post("your_collection_name", "list_animations")
   ```
 
-- **List available character maps:**
+- **Get available character maps and respond to the sender as array:**
 
   ```lua
   msg.post("your_collection_name", "list_character_maps")
@@ -81,7 +81,7 @@ You can control the animation using Defold’s message system:
 - **Apply a sequence of character maps:**
 
   ```lua
-  msg.post("your_collection_name", "apply_character_maps", {"myCharmap1", "Charmap 2", ... })
+  msg.post("your_collection_name", "apply_character_maps", {"myCharmap1", "Charmap 2", --[[...]] })
   ```
 
 - **Reset all character maps:**
