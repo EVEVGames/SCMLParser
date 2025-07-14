@@ -548,7 +548,7 @@ images {
             script_reset[#script_reset + 1] = string.format("if not animation or animation == %q then", animation)
             script_animations[#script_animations + 1] = string.format("[%q] = {", animation)
             script_animations[#script_animations + 1] = string.format([[    run = function(self)]], animation)
-            script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], animation)
+            --script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], animation)
             for url, frames in pairs(objects) do
                 if string.match(url, "%-") then
                     local frame = frames[1]
@@ -587,9 +587,9 @@ images {
                                 script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
                             end
                         end
-                        script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
+                        --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
                         if type == "object" then
-                            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p")
+                            --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p")
                             script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p#"..url.."-s")
                         end
                         --script_reset[#script_reset + 1] = [[    end]]
@@ -617,7 +617,7 @@ images {
                         local lines = {}
 
                         if not enabled_objects[url] then
-                            table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
+                            --table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
                             enabled_objects[url] = true
 
                             if type == "object" then
@@ -681,7 +681,7 @@ images {
                     --script_animations[#script_animations + 1] = [[        end]]
                 end
             end
-            script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], animation)
+            --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], animation)
             script_reset[#script_reset + 1] = "end"
             script_animations[#script_animations + 1] = [[    end,]]
             script_animations[#script_animations + 1] = string.format([[    loop = %s,]], objects.looping and "true" or "false")
