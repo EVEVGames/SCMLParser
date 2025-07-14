@@ -3,6 +3,8 @@
 local default_sprite_material = "/builtins/materials/sprite.material"
 local default_sprite_sampler = "texture_sampler"
 
+local default_z_factor = .1
+
 local function xml(s)
     -- https://github.com/jonathanpoelen/lua-xmlparser
     -- (c) jonathanpoelen. MIT Licensed
@@ -449,7 +451,7 @@ images {
                             after[#after + 1] = string.format([[    y: %.3f]], ref.data.y)
                         end
                         if ref.data.z_index then
-                            after[#after + 1] = string.format([[    z: %.3f]], ref.data.z_index)
+                            after[#after + 1] = string.format([[    z: %.3f]], ref.data.z_index*default_z_factor)
                         end
                         after[#after + 1] =                   [[  }]]
                     end
@@ -726,7 +728,7 @@ go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
 go.property("alpha_factor", 1)
-go.property("z_factor", 1)
+go.property("z_factor", %3f)
 
 local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
@@ -830,6 +832,7 @@ end
 ]===],
             entity.default,
             --entity.animations[entity.default].looping and "true" or "false",
+            default_z_factor,
             table.concat(script_reset, "\n    "),
             table.concat(script_reset_character_maps, "\n    "),
             table.concat(script_animations, "\n    "),
