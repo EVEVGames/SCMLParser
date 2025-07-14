@@ -390,19 +390,19 @@ images {
                                 break
                             end
                         end
-                        local a, x, y, scale_x, scale_y
-                        for index3 = index2 - 1, 1, -1 do
-                            local this = obj[index3]
-                            if this and not this._parent then
-                                a = this.a
-                                x = this.x
-                                y = this.y
-                                scale_x = this.scale_x
-                                scale_y = this.scale_y
-                                break
-                            end
-                        end
                         if frame._parent then
+                            local a, x, y, scale_x, scale_y
+                            for index3 = index2 - 1, 1, -1 do
+                                local this = obj[index3]
+                                if this and not this._parent then
+                                    a = this.a
+                                    x = this.x
+                                    y = this.y
+                                    scale_x = this.scale_x
+                                    scale_y = this.scale_y
+                                    break
+                                end
+                            end
                             frame._a =  _a * (a or 1)
                             frame._x = _scale_x * (x or 1)
                             frame._scale_x = _scale_x * (scale_x or 1)
