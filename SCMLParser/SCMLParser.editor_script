@@ -449,7 +449,7 @@ images {
                             after[#after + 1] = string.format([[    y: %.3f]], ref.data.y)
                         end
                         if ref.data.z_index then
-                            after[#after + 1] = string.format([[    z: %.3f]], (ref.data.z_index * .01))
+                            after[#after + 1] = string.format([[    z: %.3f]], ref.data.z_index)
                         end
                         after[#after + 1] =                   [[  }]]
                     end
@@ -574,7 +574,7 @@ images {
                             script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
                         end
                         if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f*self.z_factor)]], url, tonumber(frame.z_index) * .01)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f*self.z_factor)]], url, tonumber(frame.z_index))
                         end
                         if type == "object" and frame._a then
                             script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f*self.alpha_factor)]], url.."-p#"..url.."-s", tonumber(frame._a))
