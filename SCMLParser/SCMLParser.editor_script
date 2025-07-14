@@ -574,10 +574,10 @@ images {
                             script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
                         end
                         if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f*self.z_factor)]], url, tonumber(frame.z_index) * .01)
                         end
                         if type == "object" and frame._a then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f*self.alpha)]], url.."-p#"..url.."-s", tonumber(frame._a))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f*self.alpha_factor)]], url.."-p#"..url.."-s", tonumber(frame._a))
                         end
                         if type == "object" then
                             if frame.pivot_x then
@@ -648,10 +648,14 @@ images {
 
                         animate_if_changed("position.x", next._x, frame._x)
                         animate_if_changed("position.y", next._y, frame._y)
-                        animate_if_changed("position.z", next.z_index and next.z_index * .01, frame.z_index and frame.z_index * .01)
 
+                        if next.z_index and frame.z_index ~= next.z_index then
+                            table.insert(lines, tab..string.format([[go.animate(%q, "position.z", go.PLAYBACK_ONCE_FORWARD, %.3f*self.z_factor, self.easing, %.3f)]], url, tonumber(next.z_index), next_time))
+                            has_animation = true
+                        end
+                        
                         if type == "object" and next._a and frame._a ~= next._a then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f*self.alpha)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
+                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f*self.alpha_factor, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
                             has_animation = true
                         end
 
@@ -721,7 +725,8 @@ images {
 go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
-go.property("alpha", 1)
+go.property("alpha_factor", 1)
+go.property("z_factor", 1)
 
 local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
