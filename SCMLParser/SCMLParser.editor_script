@@ -433,16 +433,6 @@ images {
                     current[#current + 1] =     string.format([[  children: "%s"]], ref.url)
                     after[#after + 1] =                       [[embedded_instances {]]
                     after[#after + 1] =         string.format([[  id: "%s"]], ref.url)
-                    --[=[if ref.data.scale_x or ref.data.scale_y then
-                        after[#after + 1] =                   [[  scale3 {]]
-                        if ref.data.scale_x then
-                            after[#after + 1] = string.format([[    x: %.3f]], ref.data.scale_x)
-                        end
-                        if ref.data.scale_y then
-                            after[#after + 1] = string.format([[    y: %.3f]], ref.data.scale_y)
-                        end
-                        after[#after + 1] =                   [[  }]]
-                    end--]=]
                     if ref.data.angle then
                         local quat = quat_from_z_deg(tonumber(ref.data.angle))
                         after[#after + 1] =                   [[  rotation {]]
