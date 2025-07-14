@@ -586,7 +586,7 @@ images {
                             script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f)]], url, tonumber(frame.z_index) * .01)
                         end
                         if type == "object" and frame._a then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._a))
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f*self.alpha)]], url.."-p#"..url.."-s", tonumber(frame._a))
                         end
                         if type == "object" then
                             if frame.pivot_x then
@@ -660,7 +660,7 @@ images {
                         animate_if_changed("position.z", next.z_index and next.z_index * .01, frame.z_index and frame.z_index * .01)
 
                         if type == "object" and next._a and frame._a ~= next._a then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
+                            table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f*self.alpha)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
                             has_animation = true
                         end
 
@@ -730,6 +730,7 @@ images {
 go.property("play", true)
 go.property("animation", hash(%q))
 go.property("loop", true)
+go.property("alpha", 1)
 
 local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
@@ -812,7 +813,7 @@ function on_message(self, message_id, message, sender)
             error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(animation_names, ", ")))
         end
     elseif message_id == hash("stop_animation") then
-        stop_animation()
+        stop_animation(self)
     elseif message_id == hash("list_animations") then
         msg.post(sender, hash("animations_list"), animation_names)
     elseif message_id == hash("list_character_maps") then
