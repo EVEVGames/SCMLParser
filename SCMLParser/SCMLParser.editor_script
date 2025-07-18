@@ -3,7 +3,7 @@
 local default_sprite_material = "/builtins/materials/sprite.material"
 local default_sprite_sampler = "texture_sampler"
 
-local default_z_factor = .1
+local default_z_factor = .001
 
 local function xml(s)
     -- https://github.com/jonathanpoelen/lua-xmlparser
@@ -549,7 +549,7 @@ images {
             script_reset[#script_reset + 1] = "-- "..animation
             script_reset[#script_reset + 1] = string.format("if not animation or animation == %q then", animation)
             script_animations[#script_animations + 1] = string.format("[%q] = {", animation)
-            script_animations[#script_animations + 1] = string.format([[    run = function(self)]], animation)
+            script_animations[#script_animations + 1] = string.format([[    run = function(self, loop)]], animation)
             --script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], animation)
             for url, frames in pairs(objects) do
                 if string.match(url, "%-") then
@@ -648,8 +648,21 @@ images {
                             has_animation = true
                         end
 
-                        animate_if_changed("position.x", next._x, frame._x)
-                        animate_if_changed("position.y", next._y, frame._y)
+                        if type == "object" and next.pivot_x and frame.pivot_x ~= next.pivot_x then
+                            table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, %f - (go.get(%q, "size").x * %f * %f * math.cos(math.rad(%f)) + go.get(%q, "size").y * %f * %f * math.sin(math.rad(%f))),self.easing, %f)]],
+                            url, tonumber(next._x), url.."-p#"..url.."-s", tonumber(next.pivot_x), tonumber(next._scale_x or 1), tonumber(next.angle or 0), url.."-p#"..url.."-s", tonumber(next.pivot_y or 0), tonumber(next._scale_y or 1), tonumber(next.angle or 0), next_time))
+                            has_animation = true
+                        else
+                            animate_if_changed("position.x", next._x, frame._x)
+                        end
+
+                        if type == "object" and next.pivot_y and frame.pivot_y ~= next.pivot_y then
+                            table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, %f - (go.get(%q, "size").x * %f * %f * math.sin(math.rad(%f)) + go.get(%q, "size").y * %f * %f * math.cos(math.rad(%f))), self.easing, %f)]],
+                            url, tonumber(next._y), url.."-p#"..url.."-s", tonumber(next.pivot_x), tonumber(next._scale_x or 1), tonumber(next.angle or 0), url.."-p#"..url.."-s", tonumber(next.pivot_y or 0), tonumber(next._scale_y or 1), tonumber(next.angle or 0), next_time))
+                            has_animation = true
+                        else
+                            animate_if_changed("position.y", next._y, frame._y)
+                        end
 
                         if next.z_index and frame.z_index ~= next.z_index then
                             table.insert(lines, tab..string.format([[go.animate(%q, "position.z", go.PLAYBACK_ONCE_FORWARD, %.3f*self.z_factor, self.easing, %.3f)]], url, tonumber(next.z_index), next_time))
@@ -673,12 +686,14 @@ images {
                         end
 
                         if current_time ~= 0 and has_animation and next_time ~= 0 then
-                            script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function()]], current_time)
+                            --if index == #frames then script_animations[#script_animations + 1] = [[        if not loop then return end]] end
+                            script_animations[#script_animations + 1] = string.format([[        %ssave_timer(self, timer.delay(%.3f, false, function()]], frame == first and "if not loop then " or "", current_time)
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = "    " .. line
                             end
-                            script_animations[#script_animations + 1] = [[        end))]]
+                            script_animations[#script_animations + 1] = string.format([[        end))%s]], frame == first and " end" or "")
                         elseif current_time == 0 and next_time ~= 0 then
+                            --if index == #frames then script_animations[#script_animations + 1] = [[        if not loop then return end]] end
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = line
                             end
@@ -782,11 +797,12 @@ function init(self)
     if self.play then
         local animation = animation_hashes[self.animation]
         if animation then
-            animations[animation].run(self)
-            if self.loop then
+            local loop = self.loop
+            animations[animation].run(self, loop)
+            if loop then
                 save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
                     stop_animation(self, handler, animation)
-                    animations[animation].run(self)
+                    animations[animation].run(self, loop)
                 end))
             end
         else
@@ -799,12 +815,13 @@ function on_message(self, message_id, message, sender)
     if message_id == hash("play_animation") then
         local animation = message.animation or animation_hashes[self.animation]
         if animation then
+            local loop = message.loop or (message.loop == nil and animations[animation].loop)
             stop_animation(self)
-            animations[animation].run(self)
-            if message.loop or (message.loop == nil and animations[animation].loop) then
+            animations[animation].run(self, loop)
+            if loop then
                 save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
                     stop_animation(self, handler, animation)
-                    animations[animation].run(self)
+                    animations[animation].run(self, loop)
                 end))
             end
         else
