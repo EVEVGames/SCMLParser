@@ -686,14 +686,12 @@ images {
                         end
 
                         if current_time ~= 0 and has_animation and next_time ~= 0 then
-                            --if index == #frames then script_animations[#script_animations + 1] = [[        if not loop then return end]] end
-                            script_animations[#script_animations + 1] = string.format([[        %ssave_timer(self, timer.delay(%.3f, false, function()]], frame == first and "if not loop then " or "", current_time)
+                            script_animations[#script_animations + 1] = string.format([[        %ssave_timer(self, timer.delay(%.3f, false, function()]], next == first and "if loop then " or "", current_time)
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = "    " .. line
                             end
-                            script_animations[#script_animations + 1] = string.format([[        end))%s]], frame == first and " end" or "")
+                            script_animations[#script_animations + 1] = string.format([[        end))%s]], next == first and " end" or "")
                         elseif current_time == 0 and next_time ~= 0 then
-                            --if index == #frames then script_animations[#script_animations + 1] = [[        if not loop then return end]] end
                             for _, line in ipairs(lines) do
                                 script_animations[#script_animations + 1] = line
                             end
@@ -797,12 +795,11 @@ function init(self)
     if self.play then
         local animation = animation_hashes[self.animation]
         if animation then
-            local loop = self.loop
-            animations[animation].run(self, loop)
-            if loop then
+            animations[animation].run(self, self.loop)
+            if self.loop then
                 save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
                     stop_animation(self, handler, animation)
-                    animations[animation].run(self, loop)
+                    animations[animation].run(self, self.loop)
                 end))
             end
         else
