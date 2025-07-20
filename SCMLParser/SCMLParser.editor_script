@@ -89,6 +89,7 @@ local function SCMLParser(opts)
     local files = {}
 
     local keyframes = {}
+    local pivots = {}
 
     local entities = {}
 
@@ -263,7 +264,7 @@ local function SCMLParser(opts)
                                                             animation[ref.url] = {}
                                                         end
                                                         for _, node in pairs(node.children) do
-                                                            if node.tag == "key" and node.attrs.id == key then
+                                                            if node.tag == "key" and tonumber(node.attrs.id or 0) >= tonumber(key) then
                                                                 if not keyframes[node.attrs.time or "0"] then
                                                                     keyframes[#keyframes + 1] = tonumber(node.attrs.time or 0)
                                                                     keyframes[node.attrs.time or "0"] = true
@@ -278,7 +279,7 @@ local function SCMLParser(opts)
                                                                     end
                                                                     node.attrs.z_index = z_index
                                                                     node.attrs._last = reparented
-                                                                    if not animation[ref.url][tostring(key)] then
+                                                                    if not animation[ref.url][node.attrs.time or "0"] then -- tostring(key)
                                                                         if not ref.data then
                                                                             ref.data = node.attrs
                                                                             if ref.pivot then
@@ -287,7 +288,7 @@ local function SCMLParser(opts)
                                                                             end
                                                                         end
                                                                         animation[ref.url][#animation[ref.url] + 1] = node.attrs
-                                                                        animation[ref.url][tostring(key)] = true
+                                                                        animation[ref.url][node.attrs.time or "0"] = true
                                                                     end
                                                                 end
                                                             end
@@ -318,8 +319,8 @@ local function SCMLParser(opts)
             if file.atlas == index then
                 local image_file = io.open(path..file.name, "r")
                 if not image_file then error(string.format("The image file %q is missing from the same directory as the %s.scml file. Please make sure all required image files are present and try again.", file.name, name)) end
-                    image_file:close()
-                    atlas[#atlas + 1] = string.format([==[
+                image_file:close()
+                atlas[#atlas + 1] = string.format([==[
 images {
     image: %q
     pivot_x: %.3f
@@ -465,7 +466,7 @@ images {
                 elseif ref.type == "object" then
                     local image = assert(folders[ref.data.folder..":"..ref.data.file])
                     local default_animation = string.match("/"..image.name, "^.*/(.-)%..-$")
-                    
+                    pivots[ref.url] = {pivot_x = tonumber(image.pivot_x or 0.5), pivot_y = tonumber(image.pivot_y or 0.5)}
                     if character_maps[ref.data.folder..":"..ref.data.file] then
                         for _, map in pairs(character_maps[ref.data.folder..":"..ref.data.file]) do
                             local url = string.gsub(ref.url, "%-s$", "")
@@ -583,10 +584,10 @@ images {
                         end
                         if type == "object" then
                             if frame.pivot_x then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x or pivots[url.."-s"].pivot_x))
                             end
                             if frame.pivot_y then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y or pivots[url.."-s"].pivot_y))
                             end
                         end
                         --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
@@ -643,26 +644,13 @@ images {
 
                         if next.angle and frame.angle ~= next.angle then
                             local quat = quat_from_z_deg(tonumber(next.angle))
-                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url, quat.z, next_time))
-                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], url, quat.w, next_time))
+                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.3f, rotation_easing(%q, "z", %.3f), %.3f)]], url, quat.z, url, tonumber(next.angle), next_time))
+                            table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.3f, rotation_easing(%q, "w", %.3f), %.3f)]], url, quat.w, url, tonumber(next.angle), next_time))
                             has_animation = true
                         end
 
-                        if type == "object" and next.pivot_x and frame.pivot_x ~= next.pivot_x then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, %f - (go.get(%q, "size").x * %f * %f * math.cos(math.rad(%f)) + go.get(%q, "size").y * %f * %f * math.sin(math.rad(%f))),self.easing, %f)]],
-                            url, tonumber(next._x), url.."-p#"..url.."-s", tonumber(next.pivot_x), tonumber(next._scale_x or 1), tonumber(next.angle or 0), url.."-p#"..url.."-s", tonumber(next.pivot_y or 0), tonumber(next._scale_y or 1), tonumber(next.angle or 0), next_time))
-                            has_animation = true
-                        else
-                            animate_if_changed("position.x", next._x, frame._x)
-                        end
-
-                        if type == "object" and next.pivot_y and frame.pivot_y ~= next.pivot_y then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, %f - (go.get(%q, "size").x * %f * %f * math.sin(math.rad(%f)) + go.get(%q, "size").y * %f * %f * math.cos(math.rad(%f))), self.easing, %f)]],
-                            url, tonumber(next._y), url.."-p#"..url.."-s", tonumber(next.pivot_x), tonumber(next._scale_x or 1), tonumber(next.angle or 0), url.."-p#"..url.."-s", tonumber(next.pivot_y or 0), tonumber(next._scale_y or 1), tonumber(next.angle or 0), next_time))
-                            has_animation = true
-                        else
-                            animate_if_changed("position.y", next._y, frame._y)
-                        end
+                        animate_if_changed("position.x", next._x, frame._x)
+                        animate_if_changed("position.y", next._y, frame._y)
 
                         if next.z_index and frame.z_index ~= next.z_index then
                             table.insert(lines, tab..string.format([[go.animate(%q, "position.z", go.PLAYBACK_ONCE_FORWARD, %.3f*self.z_factor, self.easing, %.3f)]], url, tonumber(next.z_index), next_time))
@@ -680,7 +668,7 @@ images {
                                 has_animation = true
                             end
                             if next.pivot_y and frame.pivot_y ~= next.pivot_y then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").y * (1-%.3f), self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_y), next_time))
+                                table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, go.get(%q, "size").y * (1-%.3f), self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_y), next_time))
                                 has_animation = true
                             end
                         end
@@ -764,6 +752,17 @@ end
 
 local function save_timer(self, handler)
     self.timers[#self.timers + 1] = handler
+end
+
+local function rotation_easing(url, quat, to_deg)
+    local from = go.get(url, "rotation")
+    local to = vmath.quat_rotation_z(math.rad(to_deg))
+    local from_quat, to_quat, values = from[quat], to[quat], {}
+    if from_quat == to_quat then return vmath.vector({1}) end
+    for i = 1, 60 do
+        values[i] = (vmath.slerp((i - 1) / 59, from, to)[quat] - from_quat) / (to_quat - from_quat)
+    end
+    return vmath.vector(values)
 end
 
 local animations = {
