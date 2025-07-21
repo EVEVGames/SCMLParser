@@ -63,7 +63,7 @@ You can control the animation using Defold’s message system:
 - **Stop the current animation:**
 
   ```lua
-  msg.post("your_collection_name", "stop_animation")
+  msg.post("your_collection_name", "cancel_animation")
   ```
 
 - **Get available animations and respond to the sender as array:**
