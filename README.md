@@ -57,7 +57,7 @@ You can control the animation using Defold’s message system:
 - **Play an animation:**
 
   ```lua
-  msg.post("your_collection_name", "play_animation", { animation = "animation_name", loop = false })
+  msg.post("your_collection_name", "run_animation", { animation = "animation_name", loop = false })
   ```
   
 - **Stop the current animation:**
