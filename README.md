@@ -57,37 +57,43 @@ You can control the animation using Defold’s message system:
 - **Play an animation:**
 
   ```lua
-  msg.post("your_collection_name", "run_animation", { animation = "animation_name", loop = false })
+  msg.post("your_collection_name", hash("run_animation"), {animation = "animation_name", loop = false})
   ```
   
 - **Stop the current animation:**
 
   ```lua
-  msg.post("your_collection_name", "cancel_animation")
+  msg.post("your_collection_name", hash("cancel_animation"))
   ```
 
 - **Get available animations and respond to the sender as array:**
 
   ```lua
-  msg.post("your_collection_name", "list_animations")
+  msg.post("your_collection_name", hash("list_animations"))
   ```
 
 - **Get available character maps and respond to the sender as array:**
 
   ```lua
-  msg.post("your_collection_name", "list_character_maps")
+  msg.post("your_collection_name", hash("list_character_maps"))
   ```
 
 - **Apply a sequence of character maps:**
 
   ```lua
-  msg.post("your_collection_name", "apply_character_maps", {"myCharmap1", "Charmap 2", --[[...]] })
+  msg.post("your_collection_name", hash("apply_character_maps"), {"myCharmap1", "Charmap 2", --[[...]] })
   ```
 
 - **Reset all character maps:**
 
   ```lua
-  msg.post("your_collection_name", "reset_character_maps")
+  msg.post("your_collection_name", hash("reset_character_maps"))
+  ```
+
+- **Flip the animation horizontally:**
+
+  ```lua
+  msg.post("your_collection_name", hash("hflip_animation"), {flip = true})
   ```
 
 > You can also instantiate multiple instances of the generated collection using Defold’s collectionfactory.

@@ -840,6 +840,12 @@ function on_message(self, message_id, message, sender)
         end
     elseif message_id == hash("reset_character_maps") then
         reset_character_maps(self)
+    elseif message_id == hash("hflip_animation") then
+        if message.flip == true and go.get(".", "scale.x") > 0 then
+            go.set(".", "scale.x", -go.get(".", "scale.x"))
+        elseif message.flip == false and go.get(".", "scale.x") < 0 then
+            go.set(".", "scale.x", math.abs(go.get(".", "scale.x")))
+        end
     end
 end
 ]===],
