@@ -810,7 +810,7 @@ end
 function on_message(self, message_id, message, sender)
     if message_id == hash("run_animation") then
         local animation = animation_hashes[message.animation] or message.animation
-        if animation then
+        if animation and animations[animation] then
             local loop = message.loop or (message.loop == nil and animations[animation].loop)
             stop_animation(self)
             animations[animation].run(self, loop)
@@ -823,7 +823,7 @@ function on_message(self, message_id, message, sender)
         else
             error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(animation_names, ", ")))
         end
-    elseif message_id == hash("stop_animation") then
+    elseif message_id == hash("cancel_animation") then
         stop_animation(self)
     elseif message_id == hash("list_animations") then
         msg.post(sender, hash("animations_list"), animation_names)
