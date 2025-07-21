@@ -809,7 +809,7 @@ end
 
 function on_message(self, message_id, message, sender)
     if message_id == hash("run_animation") then
-        local animation = message.animation or animation_hashes[message.animation]
+        local animation = animation_hashes[message.animation] or message.animation
         if animation then
             local loop = message.loop or (message.loop == nil and animations[animation].loop)
             stop_animation(self)
