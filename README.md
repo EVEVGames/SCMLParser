@@ -46,7 +46,7 @@ You can install SCMLParser as a dependency in your project by doing the followin
 
 The generated collection has a script attached with properties.  
 These include the **initial animation** to play and whether it should auto-play.  
-Adjust these as needed, or uncheck **"Play"** to disable auto-start.
+Adjust these as needed, or uncheck **"Run"** to disable auto-start.
 
 ---
 
