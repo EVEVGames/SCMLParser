@@ -10,9 +10,7 @@
 
 ## 🎥 Getting Started
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/f2lc-fGAcvs?si=WxSLMP-BY2QeZAf3" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-
+[<img src="https://img.youtube.com/vi/f2lc-fGAcvs/hqdefault.jpg" width="600" height="300"/>](https://www.youtube.com/embed/f2lc-fGAcvs?si=WxSLMP-BY2QeZAf3)
 
 ## 📦 Installation
 
