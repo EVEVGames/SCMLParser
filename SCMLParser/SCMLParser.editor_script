@@ -327,7 +327,7 @@ images {
     pivot_y: %.3f
 }
 ]==],
-                    path..file.name,
+                    "/"..path..file.name,
                     tonumber(file.pivot_x or 0.5),
                     1 - tonumber(file.pivot_y or 0.5)
                 )
