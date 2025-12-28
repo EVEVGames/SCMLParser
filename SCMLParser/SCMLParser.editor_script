@@ -279,6 +279,7 @@ local function SCMLParser(opts)
                                                                     end
                                                                     node.attrs.z_index = z_index
                                                                     node.attrs._last = reparented
+                                                                    node.attrs._canonical = parent_name
                                                                     if not animation[ref.url][node.attrs.time or "0"] then -- tostring(key)
                                                                         if not ref.data then
                                                                             ref.data = node.attrs
@@ -348,7 +349,7 @@ images {
 
         local collection = {
             string.format([[name: "%s"]], entity.name),
-            [[scale_along_z: 0]]
+            --[[scale_along_z: 0]]
         }
 
         local references = entity.references
@@ -525,14 +526,14 @@ images {
         collection[#collection + 1] =     string.format([[  "  component: \"/%s\"\n"]], path..entity.name..".script")
         collection[#collection + 1] =                   [[  "}\n"]]
         collection[#collection + 1] =                   [[}]]
-
+        
         for anim, refs in pairs(references) do
-
+            
             -- https://github.com/EVEVGames/SCMLParser/issues/1
             for index = 1, #keyframes do
                 traverse_refs(anim, refs, keyframes[index])
             end
-
+            
             collection[#collection + 1] =               [[embedded_instances {]]
             collection[#collection + 1] = string.format([[  id: "%s"]], anim)
             local results = generate_references(collection, refs)
@@ -684,15 +685,21 @@ images {
                                 script_animations[#script_animations + 1] = line
                             end
                         end
+
+                        --if current_time and next_time and frames[index + 1] and frames[index + 1]._canonical ~= frame._canonical then
+                        --    script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function() msg.post(%q, "disable") end))]], tonumber(current_time or 0)+tonumber(next_time or 0), url.."-p#"..url.."-s")
+                        --end
+
                     end
                     --script_animations[#script_animations + 1] = [[        end]]
                 end
             end
             --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], animation)
             script_reset[#script_reset + 1] = "end"
-            script_animations[#script_animations + 1] = [[    end,]]
+            script_animations[#script_animations + 1] = string.format([[        if loop then save_timer(self, timer.delay(%.3f, false, function() msg.post(".", "run_animation", {animation = %q, loop = true}) end)) end]], tonumber(objects.length) / 1000, animation)
+            script_animations[#script_animations + 1] =               [[    end,]]
             script_animations[#script_animations + 1] = string.format([[    loop = %s,]], objects.looping and "true" or "false")
-            script_animations[#script_animations + 1] = string.format([[    length = %.3f]], (tonumber(objects.length) / 1000)*1.1)
+            script_animations[#script_animations + 1] = string.format([[    length = %.3f]], (tonumber(objects.length) / 1000))
             script_animations[#script_animations + 1] = [[},]]
         end
 
@@ -764,7 +771,6 @@ local function rotation_easing(url, quat, to_deg)
     end
     return vmath.vector(values)
 end
-
 local animations = {
     %s
 }
@@ -795,12 +801,6 @@ function init(self)
         local animation = animation_hashes[self["Animation"]]
         if animation then
             animations[animation].run(self, self["Loop"])
-            if self["Loop"] then
-                save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
-                    stop_animation(self, handler, animation)
-                    animations[animation].run(self, self["Loop"])
-                end))
-            end
         else
             error(string.format(ERROR_MESSAGE, "", table.concat(animation_names, ", ")))
         end
@@ -814,12 +814,6 @@ function on_message(self, message_id, message, sender)
             local loop = message.loop or (message.loop == nil and animations[animation].loop)
             stop_animation(self)
             animations[animation].run(self, loop)
-            if loop then
-                save_timer(self, timer.delay(animations[animation].length, true, function(_, handler)
-                    stop_animation(self, handler, animation)
-                    animations[animation].run(self, loop)
-                end))
-            end
         else
             error(string.format(ERROR_MESSAGE, " "..(message.animation or ""), table.concat(animation_names, ", ")))
         end
