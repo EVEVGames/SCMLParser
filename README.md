@@ -56,14 +56,13 @@ The generated collection has a script attached with the following properties:
 | **Animation** | The initial animation to play. |
 | **Loop** | Whether the initial animation loops. Defaults to the animation's Spriter looping flag. |
 | **Alpha Factor** | Multiplier applied to every sprite's alpha. |
-| **Z Factor** | Spacing between z-index layers. |
+| **Z Factor** | Multiplier applied to each sprite's z-index, setting the spacing between layers. |
 
 ---
 
 ## 💬 Control Messages
 
-Control the animation using Defold's message system. The message id can be a plain
-string — Defold hashes it for you:
+Control the animation using Defold's message system:
 
 - **Play an animation:**
 
@@ -115,7 +114,7 @@ string — Defold hashes it for you:
 ## 📡 Events
 
 The animation broadcasts events during playback. They are always posted to the
-animation's own game object, so a sibling script receives them automatically. Other
+animation's own game object, so a sibling `.script` receives them automatically. Other
 game objects can receive them by subscribing (see below).
 
 | Event | Payload |
@@ -132,7 +131,7 @@ object, and `object` the url of the tagged sprite — use them to read or change
 transforms of the running animation. `animation_start` and `animation_end` fire on
 every playback (and every loop cycle).
 
-Handle events in `on_message` (here the message id is a hash):
+Handle events in `on_message`:
 
 ```lua
 function on_message(self, message_id, message, sender)
