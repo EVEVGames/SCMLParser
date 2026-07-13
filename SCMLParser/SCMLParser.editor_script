@@ -2,6 +2,7 @@
 
 local default_sprite_material = "/builtins/materials/sprite.material"
 local default_sprite_sampler = "texture_sampler"
+local default_rotation_easing_samples = 60
 
 local default_z_factor = .001
 
@@ -63,6 +64,15 @@ local function quat_from_z_deg(angle_deg)
     return { x = 0, y = 0, z = s, w = c }
 end
 
+local function sorted_keys(t)
+    local keys = {}
+    for key in pairs(t) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys)
+    return keys
+end
+
 local function SCMLParser(opts)
     local scml = editor.get(opts.selection, "path")
     local path = string.match(scml, "^.*/")
@@ -92,9 +102,38 @@ local function SCMLParser(opts)
     local pivots = {}
 
     local entities = {}
+    local tag_names = {}
+
+    -- <meta><tagline><key time="X"><tag t="N"/></key></tagline></meta>
+    local function parse_tagline(meta)
+        local keys = {}
+        for _, node in pairs(meta.children) do
+            if node.tag == "tagline" then
+                for _, node in pairs(node.children) do
+                    if node.tag == "key" then
+                        local key = {time = tonumber(node.attrs.time or 0), tags = {}}
+                        for _, node in pairs(node.children) do
+                            if node.tag == "tag" then
+                                local id = node.attrs.t or node.attrs.id or "0"
+                                key.tags[#key.tags + 1] = tag_names[id] or ("tag_"..id)
+                            end
+                        end
+                        keys[#keys + 1] = key
+                    end
+                end
+            end
+        end
+        return #keys > 0 and keys or nil
+    end
 
     for _, node in pairs(tab.children[1].children) do
-        if node.tag == "folder" then -- <folder>
+        if node.tag == "tag_list" then -- <tag_list>
+            for _, node in pairs(node.children) do
+                if node.tag == "i" then
+                    tag_names[node.attrs.id or "0"] = node.attrs.name or ""
+                end
+            end
+        elseif node.tag == "folder" then -- <folder>
             local folder = node.attrs.id or ""
             for _, node in pairs(node.children) do
                 if node.tag == "file" then -- <file>
@@ -132,8 +171,8 @@ local function SCMLParser(opts)
                                 urls = {},
                                 folder = node.attrs.folder,
                                 file = node.attrs.file,
-                                target_folder = node.attrs.target_folder,
-                                target_file = node.attrs.target_file
+                                target_folder = node.attrs.target_folder ~= "-1" and node.attrs.target_folder or nil,
+                                target_file = node.attrs.target_file ~= "-1" and node.attrs.target_file or nil
                             }
                             if not entity.character_maps[node.attrs.folder..":"..node.attrs.file] then
                                 entity.character_maps[node.attrs.folder..":"..node.attrs.file] = {}
@@ -146,7 +185,7 @@ local function SCMLParser(opts)
 
                     entity.animations[node.attrs.name] = {
                         length = node.attrs.length, -- ms
-                        looping = node.attrs.looping == "true" and true or false
+                        looping = node.attrs.looping ~= "false"
                     }
 
                     entity.references[node.attrs.name] = {}
@@ -160,6 +199,22 @@ local function SCMLParser(opts)
 
                     local objects = {}
                     local timelines = node.children
+
+                    for _, node in pairs(timelines) do
+                        if node.tag == "meta" then -- animation-level tagline
+                            animation._taglines = parse_tagline(node)
+                        elseif node.tag == "timeline" then -- object-level tagline
+                            for _, meta in pairs(node.children) do
+                                if meta.tag == "meta" then
+                                    local keys = parse_tagline(meta)
+                                    if keys then
+                                        animation._object_taglines = animation._object_taglines or {}
+                                        animation._object_taglines[node.attrs.name] = keys
+                                    end
+                                end
+                            end
+                        end
+                    end
 
                     local function get_parent(parent, bone_refs, ref, name)
                         ref = ref or reference
@@ -199,6 +254,14 @@ local function SCMLParser(opts)
                             for _, node in pairs(node.children) do
                                 if node.tag == "key" then -- <key>
                                     local bone_refs = node.children
+
+                                    local mainline_time = tonumber(node.attrs.time or 0)
+                                    if not animation._presence then
+                                        animation._presence = {times = {}, by_name = {}}
+                                    end
+                                    local presence = animation._presence
+                                    presence.times[#presence.times + 1] = mainline_time
+
                                     for _, node in pairs(node.children) do
 
                                         if node.tag == "bone_ref" or node.tag == "object_ref" then -- <bone_ref> or <object_ref>
@@ -246,6 +309,11 @@ local function SCMLParser(opts)
                                                         url = animation_key .. "-" .. parent_name .. "-" .. name .. "-s"
                                                     }
                                                     ref.pivot[#ref.pivot + 1] = ref.pivot.sprite
+
+                                                    if not presence.by_name[name] then
+                                                        presence.by_name[name] = {}
+                                                    end
+                                                    presence.by_name[name][mainline_time] = ref.url
                                                 end
                                                 local found = false
                                                 for index = 1, #parent_ref do
@@ -366,6 +434,9 @@ images {
                     if time then
                         local insert_at = #obj + 1
                         local first_time = obj[1] and tonumber(obj[1].time or 0)
+                        if not first_time or time < first_time then
+                            insert_at = 0
+                        end
                         for index3 = 1, #obj do
                             if tonumber(obj[index3].time or 0) == time then
                                 insert_at = 0 -- exists
@@ -395,23 +466,76 @@ images {
                             end
                         end
                         if frame._parent then
-                            local a, x, y, scale_x, scale_y
+                            local previous_own, next_own
                             for index3 = index2 - 1, 1, -1 do
                                 local this = obj[index3]
                                 if this and not this._parent then
-                                    a = this.a
-                                    x = this.x
-                                    y = this.y
-                                    scale_x = this.scale_x
-                                    scale_y = this.scale_y
+                                    previous_own = this
                                     break
                                 end
                             end
-                            frame._a =  _a * (a or 1)
-                            frame._x = _scale_x * (x or 1)
-                            frame._scale_x = _scale_x * (scale_x or 1)
-                            frame._y = _scale_y * (y or 1)
-                            frame._scale_y =  _scale_y * (scale_y or 1)
+                            for index3 = index2 + 1, #obj do
+                                local this = obj[index3]
+                                if this and not this._parent then
+                                    next_own = this
+                                    break
+                                end
+                            end
+
+                            local target = next_own
+                            local span = 0
+                            if target then
+                                span = tonumber(target.time or 0) - tonumber(previous_own and previous_own.time or 0)
+                            elseif animations[anim].looping and obj[1] and not obj[1]._parent then
+                                target = obj[1]
+                                span = tonumber(animations[anim].length) + tonumber(target.time or 0) - tonumber(previous_own and previous_own.time or 0)
+                            end
+
+                            local factor = 0
+                            if previous_own and target and span > 0 then
+                                factor = (time - tonumber(previous_own.time or 0)) / span
+                            end
+
+                            local function interpolate(prop, default)
+                                local from = tonumber(previous_own and previous_own[prop])
+                                local to = tonumber(target and target[prop])
+                                from = from or to or default
+                                to = to or from
+                                return from + (to - from) * factor
+                            end
+
+                            frame._a = _a * interpolate("a", 1)
+                            frame._x = _scale_x * interpolate("x", 0)
+                            frame._scale_x = _scale_x * interpolate("scale_x", 1)
+                            frame._y = _scale_y * interpolate("y", 0)
+                            frame._scale_y = _scale_y * interpolate("scale_y", 1)
+
+                            local from_angle = tonumber(previous_own and previous_own.angle)
+                            local to_angle = tonumber(target and target.angle)
+                            if from_angle or to_angle then
+                                from_angle = from_angle or to_angle
+                                to_angle = to_angle or from_angle
+                                local spin = tonumber(previous_own and previous_own.spin) or 1
+                                if spin == 0 then
+                                    frame.angle = from_angle
+                                else
+                                    if spin > 0 and (to_angle - from_angle) < 0 then
+                                        to_angle = to_angle + 360
+                                    elseif spin < 0 and (to_angle - from_angle) > 0 then
+                                        to_angle = to_angle - 360
+                                    end
+                                    frame.angle = from_angle + (to_angle - from_angle) * factor
+                                end
+                            end
+
+                            if (previous_own and previous_own.pivot_x) or (target and target.pivot_x) then
+                                frame.pivot_x = interpolate("pivot_x", 0.5)
+                            end
+                            if (previous_own and previous_own.pivot_y) or (target and target.pivot_y) then
+                                frame.pivot_y = interpolate("pivot_y", 0.5)
+                            end
+
+                            frame.z_index = previous_own and previous_own.z_index or nil
                         else
                             frame._a = (frame.a or 1) * _a
                             frame._x = (frame.x or 0) * _scale_x
@@ -518,7 +642,7 @@ images {
 
         collection[#collection + 1] =                   [[embedded_instances {]]
         collection[#collection + 1] =     string.format([[  id: "%s"]], entity.name)
-        for anim, _ in pairs(references) do
+        for _, anim in ipairs(sorted_keys(references)) do
             collection[#collection + 1] = string.format([[  children: "%s"]], anim)
         end
         collection[#collection + 1] =                   [[  data: "components {\n"]]
@@ -527,8 +651,9 @@ images {
         collection[#collection + 1] =                   [[  "}\n"]]
         collection[#collection + 1] =                   [[}]]
         
-        for anim, refs in pairs(references) do
-            
+        for _, anim in ipairs(sorted_keys(references)) do
+            local refs = references[anim]
+
             -- https://github.com/EVEVGames/SCMLParser/issues/1
             for index = 1, #keyframes do
                 traverse_refs(anim, refs, keyframes[index])
@@ -546,49 +671,43 @@ images {
         local script_reset = {}
         local script_animations = {}
 
-        for animation, objects in pairs(animations) do
+        for _, animation in ipairs(sorted_keys(animations)) do
+            local objects = animations[animation]
 
             script_reset[#script_reset + 1] = "-- "..animation
             script_reset[#script_reset + 1] = string.format("if not animation or animation == %q then", animation)
             script_animations[#script_animations + 1] = string.format("[%q] = {", animation)
             script_animations[#script_animations + 1] = string.format([[    run = function(self, loop)]], animation)
-            --script_animations[#script_animations + 1] = string.format([[        msg.post(%q, "enable")]], animation)
-            for url, frames in pairs(objects) do
+            script_animations[#script_animations + 1] = string.format([[        dispatch(self, hash("animation_start"), {animation = %q, loop = loop, collection = msg.url(".")})]], animation)
+            for _, url in ipairs(sorted_keys(objects)) do
+                local frames = objects[url]
                 if string.match(url, "%-") then
                     local frame = frames[1]
 
                     if frame then
                         local type = frame.folder and "object" or "bone"
                         --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
-                        if type == "object" and frame._scale_x then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.x", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_x))
-                        end
-                        if type == "object" and frame._scale_y then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale.y", %.3f)]], url.."-p#"..url.."-s", tonumber(frame._scale_y))
+                        if type == "object" and (frame._scale_x or frame._scale_y) then
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "scale", vmath.vector3(%.3f, %.3f, 1))]], url.."-p#"..url.."-s", tonumber(frame._scale_x or 1), tonumber(frame._scale_y or 1))
                         end
                         if frame.angle then
                             local quat = quat_from_z_deg(tonumber(frame.angle))
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.z", %.3f)]], url, quat.z)
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation.w", %.3f)]], url, quat.w)
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "rotation", vmath.quat(0, 0, %.3f, %.3f))]], url, quat.z, quat.w)
                         end
-                        if frame._x then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", %.3f)]], url, tonumber(frame._x))
-                        end
-                        if frame._y then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", %.3f)]], url, tonumber(frame._y))
-                        end
-                        if frame.z_index then
-                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.z", %.3f*self["Z Factor"])]], url, tonumber(frame.z_index))
+                        if frame._x or frame._y or frame.z_index then
+                            local z = frame.z_index and string.format([==[%.3f*self["Z Factor"]]==], tonumber(frame.z_index)) or "0"
+                            script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position", vmath.vector3(%.3f, %.3f, %s))]], url, tonumber(frame._x or 0), tonumber(frame._y or 0), z)
                         end
                         if type == "object" and frame._a then
                             script_reset[#script_reset + 1] = string.format([[    go.set(%q, "tint.w", %.3f*self["Alpha Factor"])]], url.."-p#"..url.."-s", tonumber(frame._a))
                         end
                         if type == "object" then
-                            if frame.pivot_x then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x or pivots[url.."-s"].pivot_x))
-                            end
-                            if frame.pivot_y then
-                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y or pivots[url.."-s"].pivot_y))
+                            if frame.pivot_x and frame.pivot_y then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position", vmath.vector3(-go.get(%q, "size").x * %.3f, go.get(%q, "size").y * (1-%.3f), 0))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x), url.."-p#"..url.."-s", tonumber(frame.pivot_y))
+                            elseif frame.pivot_x then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.x", -go.get(%q, "size").x * %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_x))
+                            elseif frame.pivot_y then
+                                script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
                             end
                         end
                         --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
@@ -601,74 +720,72 @@ images {
                     --script_animations[#script_animations + 1] = string.format([[        if go.exists(%q) then]], url)
 
                     local first = frame
-                    local enabled_objects = {}
+
+                    local is_object = false
+                    for index = 1, #frames do
+                        if frames[index].folder then
+                            is_object = true
+                            break
+                        end
+                    end
 
                     for index = 1, #frames do
                         local frame = frames[index]
-                        local type = frame.folder and "object" or "bone"
+                        local type = is_object and "object" or "bone"
                         local previous = frames[index - 1] or first or {}
                         local next = frames[index + 1] or first or {}
                         local current_time = tonumber(frame.time or 0) / 1000
                         local total_time = tonumber(objects.length) / 1000
                         local next_time = total_time - current_time
 
-                        if next.time then
+                        if next.time and next ~= first then
                             next_time = (tonumber(next.time) / 1000) - current_time
+                        elseif next == first and first.time then
+                            next_time = total_time - current_time + (tonumber(first.time) / 1000)
                         end
 
                         local tab = "        "
                         local has_animation = false
                         local lines = {}
 
-                        if not enabled_objects[url] then
-                            --table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url))
-                            enabled_objects[url] = true
-
-                            if type == "object" then
-                                --table.insert(lines, tab..string.format([[msg.post(%q, "enable")]], url.."-p"))
-                                table.insert(lines, tab..string.format([[if not self.hidden[%q] then msg.post(%q, "enable") end]], url, url.."-p#"..url.."-s"))
-                            end
-                            has_animation = true
-                        end
-
-                        local function animate_if_changed(prop, val, other, path)
-                            if val and other ~= val then
-                                table.insert(lines, tab..string.format([[go.animate(%q, "%s", go.PLAYBACK_ONCE_FORWARD, %.3f, self.easing, %.3f)]], path or url, prop, tonumber(val), next_time))
+                        if type == "object" then
+                            local sx = next._scale_x and tonumber(frame._scale_x) ~= tonumber(next._scale_x)
+                            local sy = next._scale_y and tonumber(frame._scale_y) ~= tonumber(next._scale_y)
+                            if sx or sy then
+                                table.insert(lines, tab..string.format([[go.animate(%q, "scale", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(%.3f, %.3f, 1), self.easing, %.3f)]],
+                                    url.."-p#"..url.."-s", tonumber(next._scale_x or frame._scale_x or 1), tonumber(next._scale_y or frame._scale_y or 1), next_time))
                                 has_animation = true
                             end
                         end
 
-                        if type == "object" then
-                            animate_if_changed("scale.x", next._scale_x, frame._scale_x, url.."-p#"..url.."-s")
-                            animate_if_changed("scale.y", next._scale_y, frame._scale_y, url.."-p#"..url.."-s")
-                        end
-
-                        if next.angle and frame.angle ~= next.angle then
+                        if next.angle and tonumber(frame.angle) ~= tonumber(next.angle) then
                             local quat = quat_from_z_deg(tonumber(next.angle))
                             table.insert(lines, tab..string.format([[go.animate(%q, "rotation.z", go.PLAYBACK_ONCE_FORWARD, %.3f, rotation_easing(%q, "z", %.3f), %.3f)]], url, quat.z, url, tonumber(next.angle), next_time))
                             table.insert(lines, tab..string.format([[go.animate(%q, "rotation.w", go.PLAYBACK_ONCE_FORWARD, %.3f, rotation_easing(%q, "w", %.3f), %.3f)]], url, quat.w, url, tonumber(next.angle), next_time))
                             has_animation = true
                         end
 
-                        animate_if_changed("position.x", next._x, frame._x)
-                        animate_if_changed("position.y", next._y, frame._y)
-
-                        if next.z_index and frame.z_index ~= next.z_index then
-                            table.insert(lines, tab..string.format([[go.animate(%q, "position.z", go.PLAYBACK_ONCE_FORWARD, %.3f*self["Z Factor"], self.easing, %.3f)]], url, tonumber(next.z_index), next_time))
+                        local dx = next._x and tonumber(frame._x) ~= tonumber(next._x)
+                        local dy = next._y and tonumber(frame._y) ~= tonumber(next._y)
+                        local dz = next.z_index and tonumber(frame.z_index) ~= tonumber(next.z_index)
+                        if dx or dy or dz then
+                            local z = (next.z_index or frame.z_index) and string.format([==[%.3f*self["Z Factor"]]==], tonumber(next.z_index or frame.z_index)) or "0"
+                            table.insert(lines, tab..string.format([[go.animate(%q, "position", go.PLAYBACK_ONCE_FORWARD, vmath.vector3(%.3f, %.3f, %s), self.easing, %.3f)]],
+                                url, tonumber(next._x or frame._x or 0), tonumber(next._y or frame._y or 0), z, next_time))
                             has_animation = true
                         end
-                        
+
                         if type == "object" and next._a and frame._a ~= next._a then
                             table.insert(lines, tab..string.format([[go.animate(%q, "tint.w", go.PLAYBACK_ONCE_FORWARD, %.3f*self["Alpha Factor"], self.easing, %.3f)]], url.."-p#"..url.."-s", tonumber(next._a), next_time))
                             has_animation = true
                         end
 
                         if type == "object" then
-                            if next.pivot_x and frame.pivot_x ~= next.pivot_x then
+                            if next.pivot_x and tonumber(frame.pivot_x) ~= tonumber(next.pivot_x) then
                                 table.insert(lines, tab..string.format([[go.animate(%q, "position.x", go.PLAYBACK_ONCE_FORWARD, -go.get(%q, "size").x * %.3f, self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_x), next_time))
                                 has_animation = true
                             end
-                            if next.pivot_y and frame.pivot_y ~= next.pivot_y then
+                            if next.pivot_y and tonumber(frame.pivot_y) ~= tonumber(next.pivot_y) then
                                 table.insert(lines, tab..string.format([[go.animate(%q, "position.y", go.PLAYBACK_ONCE_FORWARD, go.get(%q, "size").y * (1-%.3f), self.easing, %.3f)]], url.."-p", url.."-p#"..url.."-s", tonumber(next.pivot_y), next_time))
                                 has_animation = true
                             end
@@ -686,14 +803,107 @@ images {
                             end
                         end
 
-                        --if current_time and next_time and frames[index + 1] and frames[index + 1]._canonical ~= frame._canonical then
-                        --    script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function() msg.post(%q, "disable") end))]], tonumber(current_time or 0)+tonumber(next_time or 0), url.."-p#"..url.."-s")
-                        --end
-
                     end
                     --script_animations[#script_animations + 1] = [[        end]]
                 end
             end
+
+            local presence = objects._presence
+            if presence then
+                for _, name in ipairs(sorted_keys(presence.by_name)) do
+                    local by_time = presence.by_name[name]
+                    local previous_url
+                    for index = 1, #presence.times do
+                        local key_time = presence.times[index]
+                        local time = index == 1 and 0 or key_time
+                        local active_url = by_time[key_time]
+                        if active_url ~= previous_url then
+                            local flips = {}
+                            if previous_url then
+                                flips[#flips + 1] = string.format([[msg.post(%q, "disable")]], previous_url.."-p#"..previous_url.."-s")
+                            end
+                            if active_url then
+                                flips[#flips + 1] = string.format([[if not self.hidden[%q] then msg.post(%q, "enable") end]], active_url, active_url.."-p#"..active_url.."-s")
+                            end
+                            if time == 0 then
+                                for _, flip in ipairs(flips) do
+                                    script_animations[#script_animations + 1] = "        "..flip
+                                end
+                            else
+                                script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function()]], time / 1000)
+                                for _, flip in ipairs(flips) do
+                                    script_animations[#script_animations + 1] = "            "..flip
+                                end
+                                script_animations[#script_animations + 1] =               [[        end))]]
+                            end
+                            previous_url = active_url
+                        end
+                    end
+                end
+            end
+
+            local function emit_dispatch(time, event, payload)
+                local line = string.format([[dispatch(self, hash(%q), %s)]], event, payload)
+                if time == 0 then
+                    script_animations[#script_animations + 1] = "        "..line
+                else
+                    script_animations[#script_animations + 1] = string.format([[        save_timer(self, timer.delay(%.3f, false, function() ]],time/1000)..line..[[ end))]]
+                end
+            end
+
+            local function tags_literal(tags)
+                local quoted = {}
+                for index = 1, #tags do
+                    quoted[#quoted + 1] = string.format("%q", tags[index])
+                end
+                return "{"..table.concat(quoted, ", ").."}"
+            end
+
+            if objects._taglines then -- animation-level taglines
+                for index = 1, #objects._taglines do
+                    local key = objects._taglines[index]
+                    emit_dispatch(key.time, "animation_tag", string.format(
+                        [[{animation = %q, time = %.3f, tags = %s, collection = msg.url(".")}]],
+                        animation, key.time / 1000, tags_literal(key.tags)
+                    ))
+                end
+            end
+
+            if objects._object_taglines then -- object (timeline) taglines
+                for _, name in ipairs(sorted_keys(objects._object_taglines)) do
+                    local keys = objects._object_taglines[name]
+                    local by_time = presence and presence.by_name[name]
+                    for index = 1, #keys do
+                        local key = keys[index]
+                        local object_url
+                        if by_time then
+                            for index2 = 1, #presence.times do
+                                local t = presence.times[index2]
+                                if t > key.time then break end
+                                if by_time[t] then object_url = by_time[t] end
+                            end
+                            if not object_url then
+                                for index2 = 1, #presence.times do
+                                    if by_time[presence.times[index2]] then
+                                        object_url = by_time[presence.times[index2]]
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                        emit_dispatch(key.time, "animation_object_tag", string.format(
+                            [[{animation = %q, name = %q, time = %.3f, tags = %s%s, collection = msg.url(".")}]],
+                            animation, name, key.time / 1000, tags_literal(key.tags),
+                            object_url and string.format([[, object = msg.url(%q)]], object_url) or ""
+                        ))
+                    end
+                end
+            end
+
+            emit_dispatch(tonumber(objects.length), "animation_end", string.format(
+                [[{animation = %q, loop = loop, collection = msg.url(".")}]], animation
+            ))
+
             --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], animation)
             script_reset[#script_reset + 1] = "end"
             script_animations[#script_animations + 1] = string.format([[        if loop then save_timer(self, timer.delay(%.3f, false, function() msg.post(".", "run_animation", {animation = %q, loop = true}) end)) end]], tonumber(objects.length) / 1000, animation)
@@ -734,7 +944,7 @@ images {
 
 go.property("Run", true)
 go.property("Animation", hash(%q))
-go.property("Loop", true)
+go.property("Loop", %s)
 go.property("Alpha Factor", 1)
 go.property("Z Factor", %3f)
 
@@ -761,16 +971,26 @@ local function save_timer(self, handler)
     self.timers[#self.timers + 1] = handler
 end
 
+local function dispatch(self, message_id, message)
+    msg.post(".", message_id, message)
+    for index = 1, #self.subscribers do
+        msg.post(self.subscribers[index], message_id, message)
+    end
+end
+
+local ROTATION_EASING_SAMPLES = %s
+
 local function rotation_easing(url, quat, to_deg)
     local from = go.get(url, "rotation")
     local to = vmath.quat_rotation_z(math.rad(to_deg))
     local from_quat, to_quat, values = from[quat], to[quat], {}
     if from_quat == to_quat then return vmath.vector({1}) end
-    for i = 1, 60 do
-        values[i] = (vmath.slerp((i - 1) / 59, from, to)[quat] - from_quat) / (to_quat - from_quat)
+    for i = 1, ROTATION_EASING_SAMPLES do
+        values[i] = (vmath.slerp((i - 1) / (ROTATION_EASING_SAMPLES - 1), from, to)[quat] - from_quat) / (to_quat - from_quat)
     end
     return vmath.vector(values)
 end
+
 local animations = {
     %s
 }
@@ -796,6 +1016,7 @@ function init(self)
     self.easing = go.EASING_LINEAR
     self.timers = {}
     self.hidden = {}
+    self.subscribers = {}
     stop_animation(self)
     if self["Run"] then
         local animation = animation_hashes[self["Animation"]]
@@ -823,6 +1044,8 @@ function on_message(self, message_id, message, sender)
         msg.post(sender, hash("animations_list"), animation_names)
     elseif message_id == hash("list_character_maps") then
         msg.post(sender, hash("character_maps_list"), character_maps_names)
+    elseif message_id == hash("list_subscribers") then
+        msg.post(sender, hash("subscribers_list"), self.subscribers)
     elseif message_id == hash("apply_character_maps") then
         for index = 1, #message do
             local character_map = message[index]
@@ -834,6 +1057,17 @@ function on_message(self, message_id, message, sender)
         end
     elseif message_id == hash("reset_character_maps") then
         reset_character_maps(self)
+    elseif message_id == hash("subscribe") then
+        for index = 1, #self.subscribers do
+            if self.subscribers[index] == sender then return end
+        end
+        self.subscribers[#self.subscribers + 1] = sender
+    elseif message_id == hash("unsubscribe") then
+        for index = #self.subscribers, 1, -1 do
+            if self.subscribers[index] == sender then
+                table.remove(self.subscribers, index)
+            end
+        end
     elseif message_id == hash("hflip_animation") then
         local scale_x = go.get(".", "scale.x")
         if message.flip == true and scale_x > 0 then
@@ -845,10 +1079,11 @@ function on_message(self, message_id, message, sender)
 end
 ]===],
             entity.default,
-            --entity.animations[entity.default].looping and "true" or "false",
+            entity.animations[entity.default].looping and "true" or "false",
             default_z_factor,
             table.concat(script_reset, "\n    "),
             table.concat(script_reset_character_maps, "\n    "),
+            default_rotation_easing_samples,
             table.concat(script_animations, "\n    "),
             table.concat(script_character_maps, "\n    ")
         )
@@ -860,6 +1095,8 @@ end
         local collection_file = assert(io.open(path..entity.name..".collection", "w"))
         collection_file:write(table.concat(collection, "\n"))
         collection_file:close()
+
+        print(string.format("SCMLParser: /%s (default animation: %s)", path..entity.name..".collection", tostring(entity.default)))
     end
 
 end
