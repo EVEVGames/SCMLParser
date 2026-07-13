@@ -1,4 +1,4 @@
--- (c) 2025-2026 EVEVGames, Evandro C. MIT Licensed.
+-- (c) 2025 EVEVGames, Evandro C. MIT Licensed.
 
 local default_sprite_material = "/builtins/materials/sprite.material"
 local default_sprite_sampler = "texture_sampler"
@@ -979,16 +979,23 @@ local function dispatch(self, message_id, message)
 end
 
 local ROTATION_EASING_SAMPLES = %s
+local rotation_easing_cache = {}
 
 local function rotation_easing(url, quat, to_deg)
     local from = go.get(url, "rotation")
     local to = vmath.quat_rotation_z(math.rad(to_deg))
-    local from_quat, to_quat, values = from[quat], to[quat], {}
+    local from_quat, to_quat = from[quat], to[quat]
     if from_quat == to_quat then return vmath.vector({1}) end
+    local key = string.format("%%.4f,%%.4f>%%.2f:%%s", from.z, from.w, to_deg, quat)
+    local cached = rotation_easing_cache[key]
+    if cached then return cached end
+    local values = {}
     for i = 1, ROTATION_EASING_SAMPLES do
         values[i] = (vmath.slerp((i - 1) / (ROTATION_EASING_SAMPLES - 1), from, to)[quat] - from_quat) / (to_quat - from_quat)
     end
-    return vmath.vector(values)
+    local v = vmath.vector(values)
+    rotation_easing_cache[key] = v
+    return v
 end
 
 local animations = {
@@ -1068,7 +1075,7 @@ function on_message(self, message_id, message, sender)
                 table.remove(self.subscribers, index)
             end
         end
-    elseif message_id == hash("hflip_animation") then
+    elseif message_id == hash("hflip_animation") then -- deprecated
         local scale_x = go.get(".", "scale.x")
         if message.flip == true and scale_x > 0 then
             go.set(".", "scale.x", -scale_x)
