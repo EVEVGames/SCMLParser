@@ -1,4 +1,4 @@
--- (c) 2025 EVEVGames, Evandro C. MIT Licensed.
+-- (c) 2025-2026 EVEVGames, Evandro C. MIT Licensed.
 
 local default_sprite_material = "/builtins/materials/sprite.material"
 local default_sprite_sampler = "texture_sampler"
