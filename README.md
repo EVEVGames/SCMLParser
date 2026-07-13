@@ -100,7 +100,7 @@ Control the animation using Defold's message system.
   msg.post("your_collection_url", "reset_character_maps")
   ```
 
-- **Flip the animation horizontally:**
+- **Flip the animation horizontally:** _(deprecated)_
 
   ```lua
   msg.post("your_collection_url", "hflip_animation", {flip = true})
