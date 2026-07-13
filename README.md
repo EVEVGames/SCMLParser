@@ -62,48 +62,48 @@ The generated collection has a script attached with the following properties:
 
 ## 💬 Control Messages
 
-Control the animation using Defold's message system:
+Control the animation using Defold's message system.
 
 - **Play an animation:**
 
   ```lua
-  msg.post("your_collection_name", "run_animation", {animation = "animation_name", loop = false})
+  msg.post("your_collection_url", "run_animation", {animation = "animation_name", loop = false})
   ```
 
 - **Stop the current animation:**
 
   ```lua
-  msg.post("your_collection_name", "cancel_animation")
+  msg.post("your_collection_url", "cancel_animation")
   ```
 
-- **Get available animations (replied to the sender as an array):**
+- **Get available animations (replies a message `==hash("animations_list")` to the sender as an array):**
 
   ```lua
-  msg.post("your_collection_name", "list_animations")
+  msg.post("your_collection_url", "list_animations")
   ```
 
-- **Get available character maps (replied to the sender as an array):**
+- **Get available character maps (replies a message `==hash("character_maps_list")` to the sender as an array):**
 
   ```lua
-  msg.post("your_collection_name", "list_character_maps")
+  msg.post("your_collection_url", "list_character_maps")
   ```
 
 - **Apply a sequence of character maps:**
 
   ```lua
-  msg.post("your_collection_name", "apply_character_maps", {"myCharmap1", "Charmap 2", --[[...]] })
+  msg.post("your_collection_url", "apply_character_maps", {"myCharmap1", "Charmap 2", --[[...]] })
   ```
 
 - **Reset all character maps:**
 
   ```lua
-  msg.post("your_collection_name", "reset_character_maps")
+  msg.post("your_collection_url", "reset_character_maps")
   ```
 
 - **Flip the animation horizontally:**
 
   ```lua
-  msg.post("your_collection_name", "hflip_animation", {flip = true})
+  msg.post("your_collection_url", "hflip_animation", {flip = true})
   ```
 
 > You can also instantiate multiple instances of the generated collection using Defold's collectionfactory.
@@ -152,14 +152,14 @@ To receive events on a game object other than the animation's own, subscribe fir
 - **Subscribe / unsubscribe the sender:**
 
   ```lua
-  msg.post("your_collection_name", "subscribe")
-  msg.post("your_collection_name", "unsubscribe")
+  msg.post("your_collection_url", "subscribe")
+  msg.post("your_collection_url", "unsubscribe")
   ```
 
-- **List current subscribers (replied to the sender as an array):**
+- **List current subscribers (replies a message `==hash("subscribers_list")` to the sender as an array):**
 
   ```lua
-  msg.post("your_collection_name", "list_subscribers")
+  msg.post("your_collection_url", "list_subscribers")
   ```
 
 ---
