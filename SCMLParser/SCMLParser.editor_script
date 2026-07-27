@@ -141,7 +141,8 @@ local function SCMLParser(opts)
                     local file_id = string.match("/"..node.attrs.name, "^.*/(.-)%..-$")
 
                     files[file_id] = files[file_id] and (files[file_id]+1) or 0
-                    node.attrs.atlas = files[file_id] 
+                    node.attrs.atlas = files[file_id]
+                    node.attrs.folder_id = folder
 
                     folders[#folders + 1] = node.attrs
                     folders[folder..":"..(node.attrs.id or "")] = node.attrs
@@ -423,6 +424,7 @@ images {
         local references = entity.references
         local animations = entity.animations
         local character_maps = entity.character_maps
+        local swap_urls = {}
 
         local function traverse_refs(anim, refs, keyframe, parent)
             parent = parent or {}
@@ -684,6 +686,30 @@ images {
                 if string.match(url, "%-") then
                     local frame = frames[1]
 
+                    local is_object = false
+                    for index = 1, #frames do
+                        if frames[index].folder then
+                            is_object = true
+                            break
+                        end
+                    end
+
+                    local swaps, first_image, previous_image = {}, nil, nil
+                    for index = 1, #frames do
+                        local image = frames[index].folder and frames[index].folder..":"..frames[index].file
+                        if image then
+                            first_image = first_image or image
+                            if previous_image and image ~= previous_image then
+                                swaps[#swaps + 1] = {time = tonumber(frames[index].time or 0) / 1000, image = image}
+                            end
+                            previous_image = image
+                        end
+                    end
+                    if #swaps > 0 then
+                        swap_urls[#swap_urls + 1] = url
+                        swap_urls[url] = true
+                    end
+
                     if frame then
                         local type = frame.folder and "object" or "bone"
                         --script_reset[#script_reset + 1] = string.format([[    if go.exists(%q) then]], url)
@@ -710,6 +736,9 @@ images {
                                 script_reset[#script_reset + 1] = string.format([[    go.set(%q, "position.y", go.get(%q, "size").y * (1-%.3f))]], url.."-p", url.."-p#"..url.."-s", tonumber(frame.pivot_y))
                             end
                         end
+                        if type == "object" and #swaps > 0 then
+                            script_reset[#script_reset + 1] = string.format([[    self.images[%q] = %q apply_image(self, %q)]], url, first_image, url)
+                        end
                         --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url)
                         if type == "object" then
                             --script_reset[#script_reset + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p")
@@ -720,14 +749,6 @@ images {
                     --script_animations[#script_animations + 1] = string.format([[        if go.exists(%q) then]], url)
 
                     local first = frame
-
-                    local is_object = false
-                    for index = 1, #frames do
-                        if frames[index].folder then
-                            is_object = true
-                            break
-                        end
-                    end
 
                     for index = 1, #frames do
                         local frame = frames[index]
@@ -803,6 +824,12 @@ images {
                             end
                         end
 
+                    end
+
+                    for index = 1, #swaps do
+                        script_animations[#script_animations + 1] = string.format(
+                            [[        save_timer(self, timer.delay(%.3f, false, function() self.images[%q] = %q apply_image(self, %q) end))]],
+                            swaps[index].time, url, swaps[index].image, url)
                     end
                     --script_animations[#script_animations + 1] = [[        end]]
                 end
@@ -923,20 +950,49 @@ images {
                 local map = character_map.maps[index3]
                 for index4 = 1, #map.urls do
                     local url = map.urls[index4]
-                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.atlas==0 and "" or ("_"..map.atlas))..".a.texturesetc")
-                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.animation)
-                    script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[self.hidden[%q] = nil]], url)
-                    if map.target_animation then
-                        script_character_maps[#script_character_maps + 1] = string.format([[    go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.target_atlas==0 and "" or ("_"..map.target_atlas))..".a.texturesetc")
-                        script_character_maps[#script_character_maps + 1] = string.format([[    sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.target_animation)
-                        script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = nil]], url)
-                    else
-                        script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = true]], url)
-                        script_character_maps[#script_character_maps + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p#"..url.."-s")
+                    if not swap_urls[url] then
+                        script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.atlas==0 and "" or ("_"..map.atlas))..".a.texturesetc")
+                        script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.animation)
+                        script_reset_character_maps[#script_reset_character_maps + 1] = string.format([[self.hidden[%q] = nil]], url)
+                        if map.target_animation then
+                            script_character_maps[#script_character_maps + 1] = string.format([[    go.set(%q, "image", hash(%q))]], url.."-p#"..url.."-s", "/"..path..name..(map.target_atlas==0 and "" or ("_"..map.target_atlas))..".a.texturesetc")
+                            script_character_maps[#script_character_maps + 1] = string.format([[    sprite.play_flipbook(%q, %q)]], url.."-p#"..url.."-s", map.target_animation)
+                            script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = nil]], url)
+                        else
+                            script_character_maps[#script_character_maps + 1] = string.format([[    self.hidden[%q] = true]], url)
+                            script_character_maps[#script_character_maps + 1] = string.format([[    msg.post(%q, "disable")]], url.."-p#"..url.."-s")
+                        end
                     end
                 end
             end
+            script_character_maps[#script_character_maps + 1] = "    for index = 1, #swap_urls do apply_image(self, swap_urls[index]) end"
             script_character_maps[#script_character_maps + 1] = "end,"
+        end
+
+        local script_images = {}
+        for index2 = 1, #folders do
+            local image = folders[index2]
+            script_images[#script_images + 1] = string.format([[[%q] = {atlas = %q, animation = %q},]],
+                image.folder_id..":"..(image.id or ""),
+                "/"..path..name..(image.atlas==0 and "" or ("_"..image.atlas))..".a.texturesetc",
+                string.match("/"..image.name, "^.*/(.-)%..-$"))
+        end
+
+        local script_character_map_images = {}
+        for index2 = 1, #character_maps do
+            local character_map = character_maps[index2]
+            local entries = {}
+            for index3 = 1, #character_map.maps do
+                local map = character_map.maps[index3]
+                entries[#entries + 1] = string.format("[%q] = %s,", map.folder..":"..map.file,
+                    (map.target_folder and map.target_file) and string.format("%q", map.target_folder..":"..map.target_file) or "false")
+            end
+            script_character_map_images[#script_character_map_images + 1] = string.format("[%q] = {%s},", character_map.name, table.concat(entries, " "))
+        end
+
+        local script_swap_urls = {}
+        for index2 = 1, #swap_urls do
+            script_swap_urls[#script_swap_urls + 1] = string.format("%q,", swap_urls[index2])
         end
 
         local script = string.format([===[
@@ -947,6 +1003,46 @@ go.property("Animation", hash(%q))
 go.property("Loop", %s)
 go.property("Alpha Factor", 1)
 go.property("Z Factor", %3f)
+
+local images = {
+    %s
+}
+
+local character_map_images = {
+    %s
+}
+
+local swap_urls = {
+    %s
+}
+
+local function apply_image(self, url)
+    local key = self.images[url]
+    if not key then return end
+    for index = 1, #self.character_maps do
+        local mapped = character_map_images[self.character_maps[index]]
+        local target = mapped and mapped[key]
+        if target == false then
+            key = nil
+            break
+        elseif target then
+            key = target
+        end
+    end
+    local sprite_url = url.."-p#"..url.."-s"
+    local image = key and images[key]
+    if image then
+        if self.hidden[url] then
+            self.hidden[url] = nil
+            msg.post(sprite_url, "enable")
+        end
+        go.set(sprite_url, "image", hash(image.atlas))
+        sprite.play_flipbook(sprite_url, image.animation)
+    else
+        self.hidden[url] = true
+        msg.post(sprite_url, "disable")
+    end
+end
 
 local function stop_animation(self, handler, animation)
     go.cancel_animations("#")
@@ -1023,6 +1119,8 @@ function init(self)
     self.easing = go.EASING_LINEAR
     self.timers = {}
     self.hidden = {}
+    self.images = {}
+    self.character_maps = {}
     self.subscribers = {}
     stop_animation(self)
     if self["Run"] then
@@ -1057,13 +1155,16 @@ function on_message(self, message_id, message, sender)
         for index = 1, #message do
             local character_map = message[index]
             if character_maps[character_map] then
+                self.character_maps[#self.character_maps + 1] = character_map
                 character_maps[character_map](self)
             else
                 error(string.format("The character map %%q does not exist.", character_map))
             end
         end
     elseif message_id == hash("reset_character_maps") then
+        self.character_maps = {}
         reset_character_maps(self)
+        for index = 1, #swap_urls do apply_image(self, swap_urls[index]) end
     elseif message_id == hash("subscribe") then
         for index = 1, #self.subscribers do
             if self.subscribers[index] == sender then return end
@@ -1088,6 +1189,9 @@ end
             entity.default,
             entity.animations[entity.default].looping and "true" or "false",
             default_z_factor,
+            table.concat(script_images, "\n    "),
+            table.concat(script_character_map_images, "\n    "),
+            table.concat(script_swap_urls, "\n    "),
             table.concat(script_reset, "\n    "),
             table.concat(script_reset_character_maps, "\n    "),
             default_rotation_easing_samples,
